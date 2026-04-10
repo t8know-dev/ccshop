@@ -4,9 +4,9 @@
 local basalt = require("basalt")
 
 -- Load configuration and items (they define globals)
-dofile("config.lua")
-dofile("items.lua")
-local db = dofile("db.lua")
+dofile("ccshop/config.lua")
+dofile("ccshop/items.lua")
+local db = dofile("ccshop/db.lua")
 
 -- Validate configuration and items
 local function validateAll()
