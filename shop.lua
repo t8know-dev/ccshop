@@ -191,26 +191,30 @@ local function createUI()
             state.selectedQty = nil
             renderCurrentScreen()
         end)
-    cancelButton:hide()
+    if cancelButton and cancelButton.setVisible then
+        cancelButton:setVisible(false)
+    else
+        print("ERROR: cancelButton invalid", cancelButton)
+    end
 end
 
 -- Update UI hints and cancel button visibility
 local function updateUI()
     if state.screen == 1 then
         hintLabel:setText(MSG.screen1_hint)
-        cancelButton:hide()
+        if cancelButton and cancelButton.setVisible then cancelButton:setVisible(false) end
     elseif state.screen == 2 then
         hintLabel:setText(MSG.screen2_hint)
-        cancelButton:show()
+        if cancelButton and cancelButton.setVisible then cancelButton:setVisible(true) end
     elseif state.screen == 3 then
         hintLabel:setText(MSG.screen3_hint)
-        cancelButton:show()
+        if cancelButton and cancelButton.setVisible then cancelButton:setVisible(true) end
     elseif state.screen == 4 then
         hintLabel:setText(string.format(MSG.screen4_insert, state.selectedQty) .. " " .. MSG.screen4_cancel)
-        cancelButton:show()
+        if cancelButton and cancelButton.setVisible then cancelButton:setVisible(true) end
     elseif state.screen == 5 then
         hintLabel:setText(MSG.screen5_thanks)
-        cancelButton:hide()
+        if cancelButton and cancelButton.setVisible then cancelButton:setVisible(false) end
     end
 end
 
