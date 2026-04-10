@@ -3,10 +3,27 @@
 
 local basalt = require("basalt")
 
+-- Debug logging
+local LOG_FILE = "/ccshop/shop_debug.log"
+local function writeLog(msg)
+    local t = os.date("*t")
+    local ts = string.format("[%04d-%02d-%02d %02d:%02d:%02d]",
+        t.year, t.month, t.day, t.hour, t.min, t.sec)
+    local line = ts .. " " .. msg
+    local prev = term.redirect(term.native())
+    print(line)
+    term.redirect(prev)
+    local f = fs.open(LOG_FILE, "a")
+    if f then
+        f.writeLine(line)
+        f.close()
+    end
+end
+
 -- Load configuration and items (they define globals)
-dofile("ccshop/config.lua")
-dofile("ccshop/items.lua")
-local db = dofile("ccshop/db.lua")
+dofile("/ccshop/config.lua")
+dofile("/ccshop/items.lua")
+local db = dofile("/ccshop/db.lua")
 
 -- Validate configuration and items
 local function validateAll()
@@ -82,6 +99,7 @@ local relayLock, ae2Adapter, depositor, relayNote, monitor, pedestals
 
 -- Initialize peripherals
 local function initPeripherals()
+    writeLog("Initializing peripherals")
     relayLock = peripheral.wrap(RELAY_LOCK)
     ae2Adapter = peripheral.wrap(AE2_ADAPTER)
     depositor = peripheral.wrap(DEPOSITOR)
@@ -90,6 +108,7 @@ local function initPeripherals()
     pedestals = {}
     for i, name in ipairs(PEDESTALS) do
         pedestals[i] = peripheral.wrap(name)
+        writeLog("Pedestal " .. i .. ": " .. name)
     end
     -- Ensure monitor is cleared and set text scale
     monitor.setTextScale(0.5)
@@ -102,7 +121,7 @@ end
 local function getAE2Stock(itemName)
     local ok, objects = pcall(ae2Adapter.getAvailableObjects)
     if not ok then
-        print("AE2 adapter error: " .. tostring(objects))
+        writeLog("AE2 adapter error: " .. tostring(objects))
         return 0
     end
     for _, obj in ipairs(objects) do
@@ -131,12 +150,17 @@ local function centerPedestalIndices(numOptions)
     for i = start, start + numOptions - 1 do
         table.insert(indices, i)
     end
+    writeLog("centerPedestalIndices: numOptions=" .. numOptions .. " total=" .. total .. " start=" .. start .. " indices: " .. table.concat(indices, ","))
     return indices
 end
 
 -- Helper: update pedestals with items and labels
 local function setPedestalOptions(options)
     -- options: array of {item=, label=, count=}
+    writeLog("setPedestalOptions called with " .. #options .. " options")
+    for i, opt in ipairs(options) do
+        writeLog("  option " .. i .. ": item=" .. tostring(opt.item) .. " label=" .. tostring(opt.label) .. " count=" .. tostring(opt.count))
+    end
     local indices = centerPedestalIndices(#options)
     for i, idx in ipairs(indices) do
         local opt = options[i]
@@ -165,7 +189,7 @@ local frame, headerLabel, hintLabel, cancelButton
 
 -- Create UI frame
 local function createUI()
-    frame = basalt.createFrame():setTerm(monitor)
+    frame = basalt.createFrame():setTerm(monitor):setBackground(colors.black)
     -- Header (top line)
     headerLabel = frame:addLabel()
         :setPosition(1,1):setSize(monitor.getSize(),1)
@@ -180,6 +204,8 @@ local function createUI()
         :setText(MSG.cancel_btn)
         :setPosition(1,1)
         :setSize(#MSG.cancel_btn, 1)
+        :setBackground(colors.gray)
+        :setForeground(colors.white)
         :onClick(function()
             if state.screen == 4 then
                 pcall(relayLock.setOutput, "bottom", true)  -- lock depositor
@@ -194,7 +220,7 @@ local function createUI()
     if cancelButton and cancelButton.setVisible then
         cancelButton:setVisible(false)
     else
-        print("ERROR: cancelButton invalid", cancelButton)
+        writeLog("ERROR: cancelButton invalid " .. tostring(cancelButton))
     end
 end
 
@@ -220,6 +246,7 @@ end
 
 -- Screen 1: Category selection
 local function renderScreen1()
+    writeLog("Rendering screen 1 (categories)")
     clearPedestals()
     local options = {}
     for _, cat in ipairs(CATEGORIES) do
@@ -231,6 +258,7 @@ end
 
 -- Screen 2: Material selection (filtered by category and stock)
 local function renderScreen2()
+    writeLog("Rendering screen 2 (materials) for category: " .. tostring(state.selectedCategory))
     clearPedestals()
     local options = {}
     for _, mat in ipairs(MATERIALS) do
@@ -241,8 +269,10 @@ local function renderScreen2()
             end
         end
     end
+    writeLog("Available materials: " .. #options)
     if #options == 0 then
         -- No materials available, go back to screen 1
+        writeLog("No materials available, returning to screen 1")
         state.screen = 1
         renderCurrentScreen()
         return
@@ -253,8 +283,10 @@ end
 
 -- Screen 3: Quantity selection
 local function renderScreen3()
+    writeLog("Rendering screen 3 (quantities) for material: " .. tostring(state.selectedMaterial.item))
     clearPedestals()
     local stock = getAE2Stock(state.selectedMaterial.item)
+    writeLog("Stock: " .. stock .. " minQty: " .. state.selectedMaterial.minQty)
     local quantities = {}
     local startIdx = findQuantityIndex(state.selectedMaterial.minQty)
     if not startIdx then startIdx = 1 end
@@ -266,8 +298,10 @@ local function renderScreen3()
             break
         end
     end
+    writeLog("Available quantities: " .. #quantities)
     if #quantities == 0 then
         -- No quantities available (stock less than minQty) – should not happen
+        writeLog("No quantities available, returning to screen 2")
         state.screen = 2
         renderCurrentScreen()
         return
@@ -342,7 +376,7 @@ local function renderScreen5()
     }
     pcall(db.log, record)
     -- Mock dispense
-    print("[MOCK] Dispense " .. state.selectedQty .. "x " .. state.selectedMaterial.item)
+    writeLog("[MOCK] Dispense " .. state.selectedQty .. "x " .. state.selectedMaterial.item)
     -- Auto-return to screen 1 after CONFIRM_DELAY seconds
     os.sleep(CONFIRM_DELAY)
     state.screen = 1
@@ -385,27 +419,58 @@ local function eventLoop()
         local event = eventData[1]
         -- Pedestal click events from display_pedestal peripheral
         if event == "pedestal_left_click" or event == "pedestal_right_click" then
+            writeLog("Pedestal event: " .. event .. " on " .. tostring(eventData[2]))
+            if type(eventData[3]) == "table" then
+                local info = "name=" .. tostring(eventData[3].name) .. " count=" .. tostring(eventData[3].count) .. " displayName=" .. tostring(eventData[3].displayName)
+                writeLog("Event data[3]: " .. info)
+            else
+                writeLog("Event data[3]: " .. type(eventData[3]))
+            end
             local pedName = eventData[2]  -- peripheral name
             local side = (event == "pedestal_right_click") and "right" or "left"
+            writeLog("side determined as: " .. side)
             -- Find pedestal index
             local pedIdx = nil
             for i, name in ipairs(PEDESTALS) do
                 if name == pedName then pedIdx = i; break end
             end
-            if not pedIdx then break end  -- unknown pedestal
+            if not pedIdx then
+                writeLog("Unknown pedestal: " .. pedName)
+                break
+            end
+            writeLog("pedestal index: " .. pedIdx .. ", side: " .. side .. ", screen: " .. state.screen)
             -- Determine action based on screen and mouse button
+            local itemId = type(eventData[3]) == "table" and eventData[3].name
             if state.screen == 1 then
                 -- Category selection: right-click only
                 if side == "right" then
                     local catIdx = nil
-                    local indices = centerPedestalIndices(#CATEGORIES)
-                    for i, idx in ipairs(indices) do
-                        if idx == pedIdx then catIdx = i; break end
+                    -- Try to find category by itemId first (more reliable)
+                    if itemId then
+                        for i, cat in ipairs(CATEGORIES) do
+                            if cat.item == itemId then
+                                catIdx = i
+                                break
+                            end
+                        end
+                        if catIdx then
+                            writeLog("Found category by itemId: " .. itemId .. " index: " .. catIdx)
+                        end
+                    end
+                    -- Fallback to pedestal index mapping
+                    if not catIdx then
+                        local indices = centerPedestalIndices(#CATEGORIES)
+                        for i, idx in ipairs(indices) do
+                            if idx == pedIdx then catIdx = i; break end
+                        end
                     end
                     if catIdx then
+                        writeLog("Selected category index: " .. catIdx .. " label: " .. CATEGORIES[catIdx].label)
                         state.selectedCategory = CATEGORIES[catIdx].label
                         state.screen = 2
                         renderCurrentScreen()
+                    else
+                        writeLog("No category mapped for pedestal index " .. pedIdx .. " itemId " .. tostring(itemId))
                     end
                 end
             elseif state.screen == 2 then
@@ -418,15 +483,33 @@ local function eventLoop()
                             table.insert(materialsInCategory, mat)
                         end
                     end
-                    local indices = centerPedestalIndices(#materialsInCategory)
                     local matIdx = nil
-                    for i, idx in ipairs(indices) do
-                        if idx == pedIdx then matIdx = i; break end
+                    -- Try to find material by itemId first
+                    if itemId then
+                        for i, mat in ipairs(materialsInCategory) do
+                            if mat.item == itemId then
+                                matIdx = i
+                                break
+                            end
+                        end
+                        if matIdx then
+                            writeLog("Found material by itemId: " .. itemId .. " index: " .. matIdx)
+                        end
+                    end
+                    -- Fallback to pedestal index mapping
+                    if not matIdx then
+                        local indices = centerPedestalIndices(#materialsInCategory)
+                        for i, idx in ipairs(indices) do
+                            if idx == pedIdx then matIdx = i; break end
+                        end
                     end
                     if matIdx then
+                        writeLog("Selected material index: " .. matIdx .. " label: " .. materialsInCategory[matIdx].label)
                         state.selectedMaterial = materialsInCategory[matIdx]
                         state.screen = 3
                         renderCurrentScreen()
+                    else
+                        writeLog("No material mapped for pedestal index " .. pedIdx .. " itemId " .. tostring(itemId))
                     end
                 elseif side == "left" then
                     -- Back to screen 1
@@ -447,15 +530,34 @@ local function eventLoop()
                             table.insert(quantities, qtyNum)
                         else break end
                     end
-                    local indices = centerPedestalIndices(#quantities)
                     local qtyIdx = nil
-                    for i, idx in ipairs(indices) do
-                        if idx == pedIdx then qtyIdx = i; break end
+                    -- Try to find quantity by item count from event
+                    local itemCount = type(eventData[3]) == "table" and eventData[3].count
+                    if itemCount then
+                        for i, qty in ipairs(quantities) do
+                            if qty == itemCount then
+                                qtyIdx = i
+                                break
+                            end
+                        end
+                        if qtyIdx then
+                            writeLog("Found quantity by count: " .. itemCount .. " index: " .. qtyIdx)
+                        end
+                    end
+                    -- Fallback to pedestal index mapping
+                    if not qtyIdx then
+                        local indices = centerPedestalIndices(#quantities)
+                        for i, idx in ipairs(indices) do
+                            if idx == pedIdx then qtyIdx = i; break end
+                        end
                     end
                     if qtyIdx then
+                        writeLog("Selected quantity index: " .. qtyIdx .. " value: " .. quantities[qtyIdx])
                         state.selectedQty = quantities[qtyIdx]
                         state.screen = 4
                         renderCurrentScreen()
+                    else
+                        writeLog("No quantity mapped for pedestal index " .. pedIdx .. " itemCount " .. tostring(itemCount))
                     end
                 elseif side == "left" then
                     state.screen = 2
@@ -469,7 +571,7 @@ local function eventLoop()
 end
 
 -- Main
-print("Starting shop system...")
+writeLog("Starting shop system...")
 local ok, err = pcall(function()
     validateAll()
     initPeripherals()
@@ -483,7 +585,7 @@ local ok, err = pcall(function()
 end)
 
 if not ok then
-    print("Fatal error: " .. tostring(err))
+    writeLog("Fatal error: " .. tostring(err))
     -- Attempt to lock depositor on crash
     pcall(relayLock.setOutput, "bottom", true)
     error(err)

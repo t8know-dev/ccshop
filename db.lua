@@ -1,6 +1,6 @@
 -- db.lua — Purchase logging helpers (ndjson format)
 
-local PURCHASES_FILE = "purchases.json"
+local PURCHASES_FILE = "/ccshop/purchases.json"
 
 -- Append one record to purchases.json (ndjson format)
 -- record = { timestamp, playerName (nil ok), category, item, qty, price }
