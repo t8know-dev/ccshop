@@ -28,21 +28,51 @@ monitor.setTextScale(0.5)
 
 local relay = peripheral.wrap("redstone_relay_37")
 local RELAY_SIDE = "front" -- note block on front face
+local NOTE_PULSE_SECS = 0.3  -- pulse length for note block (seconds)
+local NOTE_COOLDOWN_SECS = 0.5  -- minimum time between notes (seconds)
+local lastNoteTime = 0
+
 local function playNote()
-    if not relay then
-        print("Note: redstone relay not found")
+    local now = os.clock()
+    if now - lastNoteTime < NOTE_COOLDOWN_SECS then
+        -- Skip if still in cooldown
         return
     end
+
+    if not relay then
+        -- Try to re-acquire the relay in case it disconnected
+        relay = peripheral.wrap("redstone_relay_37")
+        if not relay then
+            print("Note: redstone relay not found")
+            return
+        end
+    end
+
+    -- First attempt
     local ok, err = pcall(relay.setOutput, RELAY_SIDE, true)
     if not ok then
-        print("Note: failed to activate relay: " .. tostring(err))
-        return
+        -- Maybe relay disconnected, try to re-wrap
+        relay = peripheral.wrap("redstone_relay_37")
+        if not relay then
+            print("Note: failed to activate relay: " .. tostring(err))
+            return
+        end
+        -- Retry once
+        ok, err = pcall(relay.setOutput, RELAY_SIDE, true)
+        if not ok then
+            print("Note: failed to activate relay (retry): " .. tostring(err))
+            return
+        end
     end
-    os.sleep(0.1)
+
+    os.sleep(NOTE_PULSE_SECS)
+
     local ok2, err2 = pcall(relay.setOutput, RELAY_SIDE, false)
     if not ok2 then
         print("Note: failed to deactivate relay: " .. tostring(err2))
     end
+
+    lastNoteTime = os.clock()
 end
 
 local W = monitor.getSize()
