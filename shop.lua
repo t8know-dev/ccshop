@@ -25,6 +25,26 @@ end
 local monitor = peripheral.find("monitor")
 if not monitor then error("Monitor not found", 0) end
 monitor.setTextScale(0.5)
+
+local relay = peripheral.wrap("redstone_relay_37")
+local RELAY_SIDE = "front" -- note block on front face
+local function playNote()
+    if not relay then
+        print("Note: redstone relay not found")
+        return
+    end
+    local ok, err = pcall(relay.setOutput, RELAY_SIDE, true)
+    if not ok then
+        print("Note: failed to activate relay: " .. tostring(err))
+        return
+    end
+    os.sleep(0.1)
+    local ok2, err2 = pcall(relay.setOutput, RELAY_SIDE, false)
+    if not ok2 then
+        print("Note: failed to deactivate relay: " .. tostring(err2))
+    end
+end
+
 local W = monitor.getSize()
 
 -- Static UI layout
@@ -118,6 +138,7 @@ local function onPedestalClick(event, _, arg2)
     ui.click:setText("  " .. (isLeft and "LMB - selected" or "RMB - preview")):setForeground(isLeft and colors.lime or colors.cyan)
 
     refreshList(pedData.name)
+    playNote()
     os.queueEvent("basalt_redraw")
 end
 
