@@ -1,39 +1,60 @@
-  -- Initialize Basalt
-  local basalt = require("basalt")
+local basalt = require("basalt")
+-- local colors = require("colors") -- use global colors table
 
-  -- Create a new GUI instance
-  local mainGui = basalt.createFrame()
+-- Find the monitor peripheral and set its scale.
+local monitor = peripheral.find("monitor") or error("Monitor not found", 0)
+monitor.setTextScale(0.5)
 
-  -- Set up the monitor with 0.5 scale
-  mainGui:show()
+-- Start with a black background.
+monitor.setBackgroundColor(colors.black)
+monitor.clear()
 
-  Next, let's add the black background and white button:
+local W, H = monitor.getSize()
+-- Create a BaseFrame that will be drawn on the monitor.
+local frame = basalt.createFrame():setTerm(monitor)
+frame:setBackground(colors.black)  -- ensure black background for the frame
 
-  -- Add a black background
-  mainGui:addLabel("background")
-    :setPosition(1, 1)
-    :setSize(30, 30)
-    :setBackground(colors.black)
+-- Helper for error handling
+local function safeExec(fn, ...)
+    local ok, err = pcall(fn, ...)
+    if not ok then
+        print("Error: " .. tostring(err))
+        monitor.setBackgroundColor(colors.red)
+        monitor.clear()
+        monitor.write(tostring(err))
+        os.sleep(3)
+        monitor.setBackgroundColor(colors.black)
+        monitor.clear()
+    end
+end
+frame.term = monitor
 
-  -- Add a white button at the center
-  local button = mainGui:addButton()
-    :setPosition(15, 14) -- Center position
-    :setSize(2, 2)
+-- Get monitor size and compute button dimensions.
+local W, H = monitor.getSize()
+local btnW = math.floor(W / 4)
+local btnH = math.floor(H / 6)
+if btnW < 2 then btnW = 2 end
+if btnH < 1 then btnH = 1 end
+local btnX = math.floor((W - btnW) / 2) + 1
+local btnY = math.floor((H - btnH) / 2) + 1
+
+-- Create a white button with a black down‑arrow.
+local arrow = "▼" -- ▼
+local button = frame:addButton()
+    :setPosition(btnX, btnY)
+    :setSize(btnW, btnH)
+    :setText(arrow)
     :setBackground(colors.white)
     :setForeground(colors.black)
-    :setText("^") -- Black arrow pointing down
 
-  -- Set up event handler for button click
-  button:onClick(function()
-    -- Change screen color to green
-    mainGui:setBackground(colors.green)
-
-    -- Wait for 3 seconds
+-- When the button is clicked, flash green for 3 seconds.
+button:onClick(function()
+    monitor.setBackgroundColor(colors.green)
+    monitor.clear()
     os.sleep(3)
+    monitor.setBackgroundColor(colors.black)
+    monitor.clear()
+end)
 
-    -- Revert back to normal background color (black)
-    mainGui:setBackground(colors.black)
-  end)
-
-  -- Start the Basalt auto-update loop
-  basalt.autoUpdate()
+-- Run Basalt’s event loop.
+basalt.run()
