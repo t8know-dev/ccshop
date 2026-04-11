@@ -529,9 +529,28 @@ local function eventLoop()
             local itemId = type(eventData[3]) == "table" and eventData[3].name
             local itemCount = type(eventData[3]) == "table" and eventData[3].count
             -- Get pedestal index and option
+            writeLog("eventData[2] type: " .. type(eventData[2]) .. " value: " .. tostring(eventData[2]))
+            -- Debug pedestalIndexByName
+            if eventData[2] then
+                writeLog("Checking if '" .. tostring(eventData[2]) .. "' is in pedestalIndexByName...")
+                for name, idx in pairs(pedestalIndexByName or {}) do
+                    if name == eventData[2] then
+                        writeLog("  Found match: " .. name .. " -> " .. idx)
+                    end
+                end
+            end
             local pedestalIndex = eventData[2] and pedestalIndexByName[eventData[2]]
+            writeLog("pedestalIndex lookup result: " .. tostring(pedestalIndex))
             local pedestalOption = pedestalIndex and state.currentOptions[pedestalIndex]
             writeLog("Pedestal index: " .. tostring(pedestalIndex) .. ", option: " .. (pedestalOption and "yes" or "no"))
+            if pedestalOption then
+                writeLog("Pedestal option details: item=" .. tostring(pedestalOption.item) .. " label=" .. tostring(pedestalOption.label) .. " count=" .. tostring(pedestalOption.count))
+            else
+                writeLog("Current options state:")
+                for idx, opt in pairs(state.currentOptions) do
+                    writeLog("  idx " .. idx .. ": item=" .. tostring(opt.item) .. " label=" .. tostring(opt.label) .. " count=" .. tostring(opt.count))
+                end
+            end
             local selectedCount = nil
             if pedestalOption and pedestalOption.count then
                 selectedCount = pedestalOption.count
