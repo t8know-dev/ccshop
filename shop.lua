@@ -141,10 +141,16 @@ end
 
 -- Helper: clear pedestals (remove items and labels)
 local function clearPedestals()
+    writeLog("clearPedestals called")
     for i = 1, #PEDESTALS do
         if pedestals[i] then
+            writeLog("Clearing pedestal " .. i)
             pcall(pedestals[i].setItem, nil)
             pcall(pedestals[i].setLabel, nil)
+            local ok1, err1 = pcall(pedestals[i].setItemRendered, false)
+            local ok2, err2 = pcall(pedestals[i].setLabelRendered, false)
+            if not ok1 then writeLog("  setItemRendered failed: " .. tostring(err1)) end
+            if not ok2 then writeLog("  setLabelRendered failed: " .. tostring(err2)) end
         end
     end
 end
@@ -171,12 +177,37 @@ local function setPedestalOptions(options)
         writeLog("  option " .. i .. ": item=" .. tostring(opt.item) .. " label=" .. tostring(opt.label) .. " count=" .. tostring(opt.count))
     end
     local indices = centerPedestalIndices(#options)
+    -- Update used pedestals
     for i, idx in ipairs(indices) do
         local opt = options[i]
         if opt and pedestals[idx] then
-            pcall(pedestals[idx].setItem, opt.item, opt.label)
-            if opt.count then
-                pcall(pedestals[idx].setLabel, tostring(opt.count))
+            writeLog("Setting pedestal " .. idx .. " with item=" .. tostring(opt.item) .. " label=" .. tostring(opt.label) .. " count=" .. tostring(opt.count))
+            -- Set item
+            if opt.item then
+                writeLog("  setItem: " .. opt.item)
+                local ok, err = pcall(pedestals[idx].setItem, opt.item)
+                if not ok then writeLog("    setItem failed: " .. tostring(err)) end
+                local ok2, err2 = pcall(pedestals[idx].setItemRendered, true)
+                if not ok2 then writeLog("    setItemRendered failed: " .. tostring(err2)) end
+            else
+                writeLog("  setItem: nil")
+                pcall(pedestals[idx].setItem, nil)
+                local ok, err = pcall(pedestals[idx].setItemRendered, false)
+                if not ok then writeLog("    setItemRendered(false) failed: " .. tostring(err)) end
+            end
+            -- Set label (count takes precedence over label)
+            local label = opt.count and tostring(opt.count) or opt.label
+            if label then
+                writeLog("  setLabel: " .. label)
+                local ok, err = pcall(pedestals[idx].setLabel, label)
+                if not ok then writeLog("    setLabel failed: " .. tostring(err)) end
+                local ok2, err2 = pcall(pedestals[idx].setLabelRendered, true)
+                if not ok2 then writeLog("    setLabelRendered failed: " .. tostring(err2)) end
+            else
+                writeLog("  setLabel: nil")
+                pcall(pedestals[idx].setLabel, nil)
+                local ok, err = pcall(pedestals[idx].setLabelRendered, false)
+                if not ok then writeLog("    setLabelRendered(false) failed: " .. tostring(err)) end
             end
         end
     end
@@ -187,8 +218,13 @@ local function setPedestalOptions(options)
             if i == idx then used = true break end
         end
         if not used and pedestals[i] then
+            writeLog("Clearing unused pedestal " .. i)
             pcall(pedestals[i].setItem, nil)
             pcall(pedestals[i].setLabel, nil)
+            local ok1, err1 = pcall(pedestals[i].setItemRendered, false)
+            local ok2, err2 = pcall(pedestals[i].setLabelRendered, false)
+            if not ok1 then writeLog("  setItemRendered(false) failed: " .. tostring(err1)) end
+            if not ok2 then writeLog("  setLabelRendered(false) failed: " .. tostring(err2)) end
         end
     end
 end
@@ -435,51 +471,7 @@ local function eventLoop()
             else
                 writeLog("Event data[3]: " .. type(eventData[3]))
             end
-            local rawPedName = eventData[2]  -- peripheral name (could be string or table)
-            local pedName
-            writeLog("rawPedName type: " .. type(rawPedName))
-            if type(rawPedName) == "string" then
-                pedName = rawPedName
-            else
-                -- Treat as object (table/userdata) and try to get its name
-                -- 1. .getName method
-                if rawPedName.getName and type(rawPedName.getName) == "function" then
-                    local success, result = pcall(rawPedName.getName)
-                    if success and type(result) == "string" then
-                        pedName = result
-                        writeLog("Got pedestal name via .getName(): " .. pedName)
-                    end
-                end
-                -- 2. peripheral.getName
-                if not pedName then
-                    local success, result = pcall(peripheral.getName, rawPedName)
-                    if success and type(result) == "string" then
-                        pedName = result
-                        writeLog("Got pedestal name via peripheral.getName: " .. pedName)
-                    end
-                end
-                -- 3. .name field
-                if not pedName and rawPedName.name and type(rawPedName.name) == "string" then
-                    pedName = rawPedName.name
-                end
-                -- 4. tostring
-                if not pedName then
-                    pedName = tostring(rawPedName)
-                end
-            end
-            writeLog("pedName determined: " .. pedName)
             local side = (event == "pedestal_right_click") and "right" or "left"
-            writeLog("side determined as: " .. side)
-            -- Find pedestal index
-            local pedIdx = nil
-            for i, name in ipairs(PEDESTALS) do
-                if name == pedName then pedIdx = i; break end
-            end
-            if not pedIdx then
-                writeLog("Unknown pedestal: " .. pedName .. ", will try to handle by item data")
-            else
-                writeLog("pedestal index: " .. pedIdx)
-            end
             writeLog("side: " .. side .. ", screen: " .. state.screen)
             -- Determine action based on screen and mouse button
             local itemId = type(eventData[3]) == "table" and eventData[3].name
@@ -501,20 +493,13 @@ local function eventLoop()
                             writeLog("Found category by itemId: " .. tostring(itemId) .. " index: " .. catIdx)
                         end
                     end
-                    -- Fallback to pedestal index mapping (only if pedIdx known)
-                    if not catIdx and pedIdx then
-                        local indices = centerPedestalIndices(#CATEGORIES)
-                        for i, idx in ipairs(indices) do
-                            if idx == pedIdx then catIdx = i; break end
-                        end
-                    end
                     if catIdx then
                         writeLog("Selected category index: " .. catIdx .. " label: " .. CATEGORIES[catIdx].label)
                         state.selectedCategory = CATEGORIES[catIdx].label
                         state.screen = 2
                         renderCurrentScreen()
                     else
-                        writeLog("No category mapped for pedestal index " .. tostring(pedIdx) .. " itemId " .. tostring(itemId))
+                        writeLog("No category found for itemId " .. tostring(itemId))
                     end
                 end
             elseif state.screen == 2 then
@@ -540,20 +525,13 @@ local function eventLoop()
                             writeLog("Found material by itemId: " .. tostring(itemId) .. " index: " .. matIdx)
                         end
                     end
-                    -- Fallback to pedestal index mapping (only if pedIdx known)
-                    if not matIdx and pedIdx then
-                        local indices = centerPedestalIndices(#materialsInCategory)
-                        for i, idx in ipairs(indices) do
-                            if idx == pedIdx then matIdx = i; break end
-                        end
-                    end
                     if matIdx then
                         writeLog("Selected material index: " .. matIdx .. " label: " .. materialsInCategory[matIdx].label)
                         state.selectedMaterial = materialsInCategory[matIdx]
                         state.screen = 3
                         renderCurrentScreen()
                     else
-                        writeLog("No material mapped for pedestal index " .. tostring(pedIdx) .. " itemId " .. tostring(itemId))
+                        writeLog("No material found for itemId " .. tostring(itemId))
                     end
                 elseif side == "left" then
                     -- Back to screen 1
@@ -587,20 +565,13 @@ local function eventLoop()
                             writeLog("Found quantity by count: " .. tostring(itemCount) .. " index: " .. qtyIdx)
                         end
                     end
-                    -- Fallback to pedestal index mapping (only if pedIdx known)
-                    if not qtyIdx and pedIdx then
-                        local indices = centerPedestalIndices(#quantities)
-                        for i, idx in ipairs(indices) do
-                            if idx == pedIdx then qtyIdx = i; break end
-                        end
-                    end
                     if qtyIdx then
                         writeLog("Selected quantity index: " .. qtyIdx .. " value: " .. quantities[qtyIdx])
                         state.selectedQty = quantities[qtyIdx]
                         state.screen = 4
                         renderCurrentScreen()
                     else
-                        writeLog("No quantity mapped for pedestal index " .. tostring(pedIdx) .. " itemCount " .. tostring(itemCount))
+                        writeLog("No quantity found for itemCount " .. tostring(itemCount))
                     end
                 elseif side == "left" then
                     state.screen = 2
