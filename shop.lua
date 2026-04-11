@@ -104,10 +104,19 @@ local relayLock, ae2Adapter, depositor, relayNote, monitor, pedestals
 local function initPeripherals()
     writeLog("Initializing peripherals")
     relayLock = peripheral.wrap(RELAY_LOCK)
+    writeLog("RELAY_LOCK wrapped: " .. tostring(relayLock))
     ae2Adapter = peripheral.wrap(AE2_ADAPTER)
+    if not ae2Adapter then
+        writeLog("AE2_ADAPTER wrap failed, trying peripheral.find(\"ae2cc_adapter\")")
+        ae2Adapter = peripheral.find("ae2cc_adapter")
+    end
+    writeLog("AE2_ADAPTER wrapped: " .. tostring(ae2Adapter) .. " (name: " .. AE2_ADAPTER .. ")")
     depositor = peripheral.wrap(DEPOSITOR)
+    writeLog("DEPOSITOR wrapped: " .. tostring(depositor))
     relayNote = peripheral.wrap(RELAY_NOTE)
+    writeLog("RELAY_NOTE wrapped: " .. tostring(relayNote))
     monitor = peripheral.wrap(MONITOR)
+    writeLog("MONITOR wrapped: " .. tostring(monitor))
     pedestals = {}
     for i, name in ipairs(PEDESTALS) do
         pedestals[i] = peripheral.wrap(name)
@@ -126,16 +135,24 @@ end
 
 -- Helper: get AE2 stock for an item name
 local function getAE2Stock(itemName)
+    if not ae2Adapter then
+        writeLog("AE2 adapter not initialized, returning stock 0")
+        return 0
+    end
     local ok, objects = pcall(ae2Adapter.getAvailableObjects)
     if not ok then
         writeLog("AE2 adapter error: " .. tostring(objects))
         return 0
     end
-    for _, obj in ipairs(objects) do
+    writeLog("getAE2Stock: itemName=" .. tostring(itemName) .. ", total objects=" .. #objects)
+    for i, obj in ipairs(objects) do
+        writeLog("  obj[" .. i .. "]: name=" .. tostring(obj.name) .. ", amount=" .. tostring(obj.amount) .. ", displayName=" .. tostring(obj.displayName))
         if obj.name == itemName then
+            writeLog("  -> MATCH, returning amount " .. tostring(obj.amount or 0))
             return obj.amount or 0
         end
     end
+    writeLog("  No match found")
     return 0
 end
 
@@ -306,12 +323,20 @@ local function renderScreen2()
     writeLog("Rendering screen 2 (materials) for category: " .. tostring(state.selectedCategory))
     clearPedestals()
     local options = {}
-    for _, mat in ipairs(MATERIALS) do
+    writeLog("MATERIALS total: " .. #MATERIALS)
+    for idx, mat in ipairs(MATERIALS) do
         if mat.category == state.selectedCategory then
+            writeLog("Material " .. idx .. ": item=" .. mat.item .. ", label=" .. mat.label .. ", category=" .. mat.category .. ", minQty=" .. mat.minQty)
             local stock = getAE2Stock(mat.item)
+            writeLog("  stock=" .. stock)
             if stock >= mat.minQty then
+                writeLog("  -> qualifies")
                 table.insert(options, { item = mat.item, label = mat.label })
+            else
+                writeLog("  -> insufficient stock")
             end
+        else
+            writeLog("Material " .. idx .. ": item=" .. mat.item .. " category mismatch (" .. mat.category .. " vs " .. state.selectedCategory .. ")")
         end
     end
     writeLog("Available materials: " .. #options)
