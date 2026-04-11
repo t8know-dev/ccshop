@@ -163,7 +163,6 @@ local function clearPedestals()
         if pedestals[i] then
             writeLog("Clearing pedestal " .. i)
             pcall(pedestals[i].setItem, nil)
-            pcall(pedestals[i].setLabel, nil)
             local ok1, err1 = pcall(pedestals[i].setItemRendered, false)
             local ok2, err2 = pcall(pedestals[i].setLabelRendered, false)
             if not ok1 then writeLog("  setItemRendered failed: " .. tostring(err1)) end
@@ -199,32 +198,35 @@ local function setPedestalOptions(options)
         local opt = options[i]
         if opt and pedestals[idx] then
             writeLog("Setting pedestal " .. idx .. " with item=" .. tostring(opt.item) .. " label=" .. tostring(opt.label) .. " count=" .. tostring(opt.count))
-            -- Set item
+            -- Set item with optional label (count takes precedence over label)
+            local label = opt.count and tostring(opt.count) or opt.label
             if opt.item then
-                writeLog("  setItem: " .. opt.item)
-                local ok, err = pcall(pedestals[idx].setItem, opt.item)
-                if not ok then writeLog("    setItem failed: " .. tostring(err)) end
+                if label then
+                    writeLog("  setItem: " .. opt.item .. " label: " .. label)
+                    local ok, err = pcall(pedestals[idx].setItem, opt.item, label)
+                    if not ok then writeLog("    setItem with label failed: " .. tostring(err)) end
+                else
+                    writeLog("  setItem: " .. opt.item)
+                    local ok, err = pcall(pedestals[idx].setItem, opt.item)
+                    if not ok then writeLog("    setItem failed: " .. tostring(err)) end
+                end
                 local ok2, err2 = pcall(pedestals[idx].setItemRendered, true)
                 if not ok2 then writeLog("    setItemRendered failed: " .. tostring(err2)) end
+                -- Keep label rendering separate (optional)
+                if label then
+                    local ok3, err3 = pcall(pedestals[idx].setLabelRendered, true)
+                    if not ok3 then writeLog("    setLabelRendered failed: " .. tostring(err3)) end
+                else
+                    local ok3, err3 = pcall(pedestals[idx].setLabelRendered, false)
+                    if not ok3 then writeLog("    setLabelRendered(false) failed: " .. tostring(err3)) end
+                end
             else
                 writeLog("  setItem: nil")
                 pcall(pedestals[idx].setItem, nil)
                 local ok, err = pcall(pedestals[idx].setItemRendered, false)
                 if not ok then writeLog("    setItemRendered(false) failed: " .. tostring(err)) end
-            end
-            -- Set label (count takes precedence over label)
-            local label = opt.count and tostring(opt.count) or opt.label
-            if label then
-                writeLog("  setLabel: " .. label)
-                local ok, err = pcall(pedestals[idx].setLabel, label)
-                if not ok then writeLog("    setLabel failed: " .. tostring(err)) end
-                local ok2, err2 = pcall(pedestals[idx].setLabelRendered, true)
-                if not ok2 then writeLog("    setLabelRendered failed: " .. tostring(err2)) end
-            else
-                writeLog("  setLabel: nil")
-                pcall(pedestals[idx].setLabel, nil)
-                local ok, err = pcall(pedestals[idx].setLabelRendered, false)
-                if not ok then writeLog("    setLabelRendered(false) failed: " .. tostring(err)) end
+                local ok2, err2 = pcall(pedestals[idx].setLabelRendered, false)
+                if not ok2 then writeLog("    setLabelRendered(false) failed: " .. tostring(err2)) end
             end
         end
     end
@@ -237,7 +239,6 @@ local function setPedestalOptions(options)
         if not used and pedestals[i] then
             writeLog("Clearing unused pedestal " .. i)
             pcall(pedestals[i].setItem, nil)
-            pcall(pedestals[i].setLabel, nil)
             local ok1, err1 = pcall(pedestals[i].setItemRendered, false)
             local ok2, err2 = pcall(pedestals[i].setLabelRendered, false)
             if not ok1 then writeLog("  setItemRendered(false) failed: " .. tostring(err1)) end
