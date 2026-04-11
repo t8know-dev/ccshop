@@ -91,6 +91,8 @@ local state = {
     selectedMaterial = nil,
     selectedQty = nil,
     lastActivity = os.clock(),
+    currentOptions = {},      -- pedestal index -> option table (item, label, count)
+    currentPedestalIndices = {}, -- which pedestal indices are currently used
 }
 local paymentCancelled = false
 
@@ -126,6 +128,12 @@ local function initPeripherals()
             writeLog("Pedestal " .. i .. ": " .. name .. " failed to wrap")
         end
     end
+    -- Create name->index mapping
+    pedestalIndexByName = {}
+    for i, name in ipairs(PEDESTALS) do
+        pedestalIndexByName[name] = i
+        writeLog("Pedestal mapping: " .. name .. " -> " .. i)
+    end
     -- Ensure monitor is cleared and set text scale
     monitor.setTextScale(0.5)
     monitor.clear()
@@ -159,6 +167,9 @@ end
 -- Helper: clear pedestals (remove items and labels)
 local function clearPedestals()
     writeLog("clearPedestals called")
+    -- Clear state tracking
+    state.currentOptions = {}
+    state.currentPedestalIndices = {}
     for i = 1, #PEDESTALS do
         if pedestals[i] then
             writeLog("Clearing pedestal " .. i)
@@ -193,6 +204,21 @@ local function setPedestalOptions(options)
         writeLog("  option " .. i .. ": item=" .. tostring(opt.item) .. " label=" .. tostring(opt.label) .. " count=" .. tostring(opt.count))
     end
     local indices = centerPedestalIndices(#options)
+    -- Update state tracking
+    state.currentOptions = {}
+    state.currentPedestalIndices = {}
+    for i, idx in ipairs(indices) do
+        state.currentPedestalIndices[idx] = true
+        if options[i] then
+            state.currentOptions[idx] = {
+                item = options[i].item,
+                label = options[i].label,
+                count = options[i].count
+            }
+            writeLog("State tracking: pedestal " .. idx .. " -> count=" .. tostring(options[i].count))
+        end
+    end
+    writeLog("Current pedestal indices: " .. table.concat(indices, ","))
     -- Update used pedestals
     for i, idx in ipairs(indices) do
         local opt = options[i]
@@ -502,6 +528,18 @@ local function eventLoop()
             -- Determine action based on screen and mouse button
             local itemId = type(eventData[3]) == "table" and eventData[3].name
             local itemCount = type(eventData[3]) == "table" and eventData[3].count
+            -- Get pedestal index and option
+            local pedestalIndex = eventData[2] and pedestalIndexByName[eventData[2]]
+            local pedestalOption = pedestalIndex and state.currentOptions[pedestalIndex]
+            writeLog("Pedestal index: " .. tostring(pedestalIndex) .. ", option: " .. (pedestalOption and "yes" or "no"))
+            local selectedCount = nil
+            if pedestalOption and pedestalOption.count then
+                selectedCount = pedestalOption.count
+                writeLog("Using count from pedestal option: " .. selectedCount)
+            else
+                selectedCount = itemCount
+                writeLog("Using count from event: " .. tostring(itemCount))
+            end
 
             if state.screen == 1 then
                 -- Category selection: right-click only
@@ -581,18 +619,18 @@ local function eventLoop()
                         else break end
                     end
                     writeLog("Generated quantities: " .. table.concat(quantities, ", "))
-                    writeLog("itemCount: " .. tostring(itemCount))
+                    writeLog("selectedCount: " .. tostring(selectedCount))
                     local qtyIdx = nil
-                    -- Try to find quantity by item count from event
-                    if itemCount then
+                    -- Try to find quantity by selected count (from pedestal option or event)
+                    if selectedCount then
                         for i, qty in ipairs(quantities) do
-                            if qty == itemCount then
+                            if qty == selectedCount then
                                 qtyIdx = i
                                 break
                             end
                         end
                         if qtyIdx then
-                            writeLog("Found quantity by count: " .. tostring(itemCount) .. " index: " .. qtyIdx)
+                            writeLog("Found quantity by count: " .. tostring(selectedCount) .. " index: " .. qtyIdx)
                         end
                     end
                     if qtyIdx then
@@ -601,7 +639,7 @@ local function eventLoop()
                         state.screen = 4
                         renderCurrentScreen()
                     else
-                        writeLog("No quantity found for itemCount " .. tostring(itemCount))
+                        writeLog("No quantity found for selectedCount " .. tostring(selectedCount))
                         -- Fallback: select first available quantity if any
                         if #quantities > 0 then
                             qtyIdx = 1
