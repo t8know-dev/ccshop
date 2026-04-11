@@ -428,20 +428,37 @@ local function eventLoop()
             end
             local rawPedName = eventData[2]  -- peripheral name (could be string or table)
             local pedName
+            writeLog("rawPedName type: " .. type(rawPedName))
             if type(rawPedName) == "string" then
                 pedName = rawPedName
-            elseif type(rawPedName) == "table" then
-                if rawPedName.name and type(rawPedName.name) == "string" then
+            else
+                -- Treat as object (table/userdata) and try to get its name
+                -- 1. .getName method
+                if rawPedName.getName and type(rawPedName.getName) == "function" then
+                    local success, result = pcall(rawPedName.getName)
+                    if success and type(result) == "string" then
+                        pedName = result
+                        writeLog("Got pedestal name via .getName(): " .. pedName)
+                    end
+                end
+                -- 2. peripheral.getName
+                if not pedName then
+                    local success, result = pcall(peripheral.getName, rawPedName)
+                    if success and type(result) == "string" then
+                        pedName = result
+                        writeLog("Got pedestal name via peripheral.getName: " .. pedName)
+                    end
+                end
+                -- 3. .name field
+                if not pedName and rawPedName.name and type(rawPedName.name) == "string" then
                     pedName = rawPedName.name
-                else
+                end
+                -- 4. tostring
+                if not pedName then
                     pedName = tostring(rawPedName)
                 end
-            else
-                pedName = tostring(rawPedName)
             end
-            if type(rawPedName) == "table" then
-                writeLog("pedName is a table, converted to string: " .. pedName)
-            end
+            writeLog("pedName determined: " .. pedName)
             local side = (event == "pedestal_right_click") and "right" or "left"
             writeLog("side determined as: " .. side)
             -- Find pedestal index
@@ -450,134 +467,135 @@ local function eventLoop()
                 if name == pedName then pedIdx = i; break end
             end
             if not pedIdx then
-                writeLog("Unknown pedestal: " .. pedName)
-                -- skip this event
+                writeLog("Unknown pedestal: " .. pedName .. ", will try to handle by item data")
             else
-                writeLog("pedestal index: " .. pedIdx .. ", side: " .. side .. ", screen: " .. state.screen)
-                -- Determine action based on screen and mouse button
-                local itemId = type(eventData[3]) == "table" and eventData[3].name
-                if state.screen == 1 then
-                    -- Category selection: right-click only
-                    if side == "right" then
-                        local catIdx = nil
-                        -- Try to find category by itemId first (more reliable)
-                        if itemId then
-                            for i, cat in ipairs(CATEGORIES) do
-                                if cat.item == itemId then
-                                    catIdx = i
-                                    break
-                                end
-                            end
-                            if catIdx then
-                                writeLog("Found category by itemId: " .. tostring(itemId) .. " index: " .. catIdx)
-                            end
-                        end
-                        -- Fallback to pedestal index mapping
-                        if not catIdx then
-                            local indices = centerPedestalIndices(#CATEGORIES)
-                            for i, idx in ipairs(indices) do
-                                if idx == pedIdx then catIdx = i; break end
+                writeLog("pedestal index: " .. pedIdx)
+            end
+            writeLog("side: " .. side .. ", screen: " .. state.screen)
+            -- Determine action based on screen and mouse button
+            local itemId = type(eventData[3]) == "table" and eventData[3].name
+            local itemCount = type(eventData[3]) == "table" and eventData[3].count
+
+            if state.screen == 1 then
+                -- Category selection: right-click only
+                if side == "right" then
+                    local catIdx = nil
+                    -- Try to find category by itemId first (most reliable)
+                    if itemId then
+                        for i, cat in ipairs(CATEGORIES) do
+                            if cat.item == itemId then
+                                catIdx = i
+                                break
                             end
                         end
                         if catIdx then
-                            writeLog("Selected category index: " .. catIdx .. " label: " .. CATEGORIES[catIdx].label)
-                            state.selectedCategory = CATEGORIES[catIdx].label
-                            state.screen = 2
-                            renderCurrentScreen()
-                        else
-                            writeLog("No category mapped for pedestal index " .. pedIdx .. " itemId " .. tostring(itemId))
+                            writeLog("Found category by itemId: " .. tostring(itemId) .. " index: " .. catIdx)
                         end
                     end
-                elseif state.screen == 2 then
-                    -- Material selection: right-click select, left-click back
-                    if side == "right" then
-                        -- Determine which material option is on this pedestal
-                        local materialsInCategory = {}
-                        for _, mat in ipairs(MATERIALS) do
-                            if mat.category == state.selectedCategory then
-                                table.insert(materialsInCategory, mat)
-                            end
+                    -- Fallback to pedestal index mapping (only if pedIdx known)
+                    if not catIdx and pedIdx then
+                        local indices = centerPedestalIndices(#CATEGORIES)
+                        for i, idx in ipairs(indices) do
+                            if idx == pedIdx then catIdx = i; break end
                         end
-                        local matIdx = nil
-                        -- Try to find material by itemId first
-                        if itemId then
-                            for i, mat in ipairs(materialsInCategory) do
-                                if mat.item == itemId then
-                                    matIdx = i
-                                    break
-                                end
-                            end
-                            if matIdx then
-                                writeLog("Found material by itemId: " .. tostring(itemId) .. " index: " .. matIdx)
-                            end
+                    end
+                    if catIdx then
+                        writeLog("Selected category index: " .. catIdx .. " label: " .. CATEGORIES[catIdx].label)
+                        state.selectedCategory = CATEGORIES[catIdx].label
+                        state.screen = 2
+                        renderCurrentScreen()
+                    else
+                        writeLog("No category mapped for pedestal index " .. tostring(pedIdx) .. " itemId " .. tostring(itemId))
+                    end
+                end
+            elseif state.screen == 2 then
+                -- Material selection: right-click select, left-click back
+                if side == "right" then
+                    -- Determine which material option is on this pedestal
+                    local materialsInCategory = {}
+                    for _, mat in ipairs(MATERIALS) do
+                        if mat.category == state.selectedCategory then
+                            table.insert(materialsInCategory, mat)
                         end
-                        -- Fallback to pedestal index mapping
-                        if not matIdx then
-                            local indices = centerPedestalIndices(#materialsInCategory)
-                            for i, idx in ipairs(indices) do
-                                if idx == pedIdx then matIdx = i; break end
+                    end
+                    local matIdx = nil
+                    -- Try to find material by itemId first
+                    if itemId then
+                        for i, mat in ipairs(materialsInCategory) do
+                            if mat.item == itemId then
+                                matIdx = i
+                                break
                             end
                         end
                         if matIdx then
-                            writeLog("Selected material index: " .. matIdx .. " label: " .. materialsInCategory[matIdx].label)
-                            state.selectedMaterial = materialsInCategory[matIdx]
-                            state.screen = 3
-                            renderCurrentScreen()
-                        else
-                            writeLog("No material mapped for pedestal index " .. pedIdx .. " itemId " .. tostring(itemId))
+                            writeLog("Found material by itemId: " .. tostring(itemId) .. " index: " .. matIdx)
                         end
-                    elseif side == "left" then
-                        -- Back to screen 1
-                        state.screen = 1
-                        renderCurrentScreen()
                     end
-                elseif state.screen == 3 then
-                    -- Quantity selection: right-click choose, left-click back
-                    if side == "right" then
-                        -- Determine which quantity option
-                        local stock = getAE2Stock(state.selectedMaterial.item)
-                        local quantities = {}
-                        local startIdx = findQuantityIndex(state.selectedMaterial.minQty)
-                        if not startIdx then startIdx = 1 end
-                        for i = startIdx, #QUANTITIES do
-                            local qtyNum = quantityToNumber(QUANTITIES[i])
-                            if qtyNum <= stock then
-                                table.insert(quantities, qtyNum)
-                            else break end
+                    -- Fallback to pedestal index mapping (only if pedIdx known)
+                    if not matIdx and pedIdx then
+                        local indices = centerPedestalIndices(#materialsInCategory)
+                        for i, idx in ipairs(indices) do
+                            if idx == pedIdx then matIdx = i; break end
                         end
-                        local qtyIdx = nil
-                        -- Try to find quantity by item count from event
-                        local itemCount = type(eventData[3]) == "table" and eventData[3].count
-                        if itemCount then
-                            for i, qty in ipairs(quantities) do
-                                if qty == itemCount then
-                                    qtyIdx = i
-                                    break
-                                end
-                            end
-                            if qtyIdx then
-                                writeLog("Found quantity by count: " .. tostring(itemCount) .. " index: " .. qtyIdx)
-                            end
-                        end
-                        -- Fallback to pedestal index mapping
-                        if not qtyIdx then
-                            local indices = centerPedestalIndices(#quantities)
-                            for i, idx in ipairs(indices) do
-                                if idx == pedIdx then qtyIdx = i; break end
+                    end
+                    if matIdx then
+                        writeLog("Selected material index: " .. matIdx .. " label: " .. materialsInCategory[matIdx].label)
+                        state.selectedMaterial = materialsInCategory[matIdx]
+                        state.screen = 3
+                        renderCurrentScreen()
+                    else
+                        writeLog("No material mapped for pedestal index " .. tostring(pedIdx) .. " itemId " .. tostring(itemId))
+                    end
+                elseif side == "left" then
+                    -- Back to screen 1
+                    state.screen = 1
+                    renderCurrentScreen()
+                end
+            elseif state.screen == 3 then
+                -- Quantity selection: right-click choose, left-click back
+                if side == "right" then
+                    -- Determine which quantity option
+                    local stock = getAE2Stock(state.selectedMaterial.item)
+                    local quantities = {}
+                    local startIdx = findQuantityIndex(state.selectedMaterial.minQty)
+                    if not startIdx then startIdx = 1 end
+                    for i = startIdx, #QUANTITIES do
+                        local qtyNum = quantityToNumber(QUANTITIES[i])
+                        if qtyNum <= stock then
+                            table.insert(quantities, qtyNum)
+                        else break end
+                    end
+                    local qtyIdx = nil
+                    -- Try to find quantity by item count from event
+                    if itemCount then
+                        for i, qty in ipairs(quantities) do
+                            if qty == itemCount then
+                                qtyIdx = i
+                                break
                             end
                         end
                         if qtyIdx then
-                            writeLog("Selected quantity index: " .. qtyIdx .. " value: " .. quantities[qtyIdx])
-                            state.selectedQty = quantities[qtyIdx]
-                            state.screen = 4
-                            renderCurrentScreen()
-                        else
-                            writeLog("No quantity mapped for pedestal index " .. pedIdx .. " itemCount " .. tostring(itemCount))
+                            writeLog("Found quantity by count: " .. tostring(itemCount) .. " index: " .. qtyIdx)
                         end
-                    elseif side == "left" then
-                        state.screen = 2
-                        renderCurrentScreen()
                     end
+                    -- Fallback to pedestal index mapping (only if pedIdx known)
+                    if not qtyIdx and pedIdx then
+                        local indices = centerPedestalIndices(#quantities)
+                        for i, idx in ipairs(indices) do
+                            if idx == pedIdx then qtyIdx = i; break end
+                        end
+                    end
+                    if qtyIdx then
+                        writeLog("Selected quantity index: " .. qtyIdx .. " value: " .. quantities[qtyIdx])
+                        state.selectedQty = quantities[qtyIdx]
+                        state.screen = 4
+                        renderCurrentScreen()
+                    else
+                        writeLog("No quantity mapped for pedestal index " .. tostring(pedIdx) .. " itemCount " .. tostring(itemCount))
+                    end
+                elseif side == "left" then
+                    state.screen = 2
+                    renderCurrentScreen()
                 end
             end
         end
