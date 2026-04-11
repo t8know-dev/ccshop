@@ -111,7 +111,11 @@ local function initPeripherals()
     pedestals = {}
     for i, name in ipairs(PEDESTALS) do
         pedestals[i] = peripheral.wrap(name)
-        writeLog("Pedestal " .. i .. ": " .. name)
+        if pedestals[i] then
+            writeLog("Pedestal " .. i .. ": " .. name .. " wrapped successfully")
+        else
+            writeLog("Pedestal " .. i .. ": " .. name .. " failed to wrap")
+        end
     end
     -- Ensure monitor is cleared and set text scale
     monitor.setTextScale(0.5)
@@ -137,16 +141,18 @@ end
 
 -- Helper: clear pedestals (remove items and labels)
 local function clearPedestals()
-    for _, ped in ipairs(pedestals) do
-        pcall(ped.setItem, nil)
-        pcall(ped.setLabel, nil)
+    for i = 1, #PEDESTALS do
+        if pedestals[i] then
+            pcall(pedestals[i].setItem, nil)
+            pcall(pedestals[i].setLabel, nil)
+        end
     end
 end
 
 -- Helper: center options across available pedestals
--- Given number of options (<= #pedestals), returns table of pedestal indices to use
+-- Given number of options (<= #PEDESTALS), returns table of pedestal indices to use
 local function centerPedestalIndices(numOptions)
-    local total = #pedestals
+    local total = #PEDESTALS
     if numOptions > total then numOptions = total end
     local start = math.floor((total - numOptions) / 2) + 1
     local indices = {}
@@ -167,7 +173,7 @@ local function setPedestalOptions(options)
     local indices = centerPedestalIndices(#options)
     for i, idx in ipairs(indices) do
         local opt = options[i]
-        if opt then
+        if opt and pedestals[idx] then
             pcall(pedestals[idx].setItem, opt.item, opt.label)
             if opt.count then
                 pcall(pedestals[idx].setLabel, tostring(opt.count))
@@ -175,12 +181,12 @@ local function setPedestalOptions(options)
         end
     end
     -- Clear unused pedestals
-    for i = 1, #pedestals do
+    for i = 1, #PEDESTALS do
         local used = false
         for _, idx in ipairs(indices) do
             if i == idx then used = true break end
         end
-        if not used then
+        if not used and pedestals[i] then
             pcall(pedestals[i].setItem, nil)
             pcall(pedestals[i].setLabel, nil)
         end
