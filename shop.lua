@@ -93,6 +93,7 @@ local state = {
     lastActivity = os.clock(),
     currentOptions = {},      -- pedestal index -> option table (item, label, count)
     currentPedestalIndices = {}, -- which pedestal indices are currently used
+    lastSelectedPedestal = nil, -- last selected pedestal index
 }
 local paymentCancelled = false
 
@@ -134,6 +135,14 @@ local function initPeripherals()
         pedestalIndexByName[name] = i
         writeLog("Pedestal mapping: " .. name .. " -> " .. i)
     end
+    -- Create object->index mapping
+    pedestalObjectToIndex = {}
+    for i, ped in ipairs(pedestals) do
+        if ped then
+            pedestalObjectToIndex[ped] = i
+            writeLog("Pedestal object mapping: " .. tostring(ped) .. " -> " .. i)
+        end
+    end
     -- Ensure monitor is cleared and set text scale
     monitor.setTextScale(0.5)
     monitor.clear()
@@ -164,12 +173,42 @@ local function getAE2Stock(itemName)
     return 0
 end
 
+-- Helper: play noteblock sound
+local function playNoteblockSound()
+    writeLog("Playing noteblock sound")
+    pcall(relayNote.setOutput, "front", true)
+    os.sleep(0.1)
+    pcall(relayNote.setOutput, "front", false)
+end
+
+-- Helper: set pedestal label with selection brackets
+local function setPedestalSelection(pedestalIdx, selected)
+    writeLog("setPedestalSelection: idx=" .. pedestalIdx .. ", selected=" .. tostring(selected))
+    local opt = state.currentOptions[pedestalIdx]
+    if not opt or not pedestals[pedestalIdx] then
+        writeLog("  No option or pedestal for index " .. pedestalIdx)
+        return
+    end
+
+    local label = opt.count and tostring(opt.count) or opt.label
+    if selected then
+        label = "[ " .. label .. " ]"
+    end
+
+    writeLog("  Setting pedestal " .. pedestalIdx .. " label: " .. label)
+    local ok, err = pcall(pedestals[pedestalIdx].setItem, opt.item, label)
+    if not ok then
+        writeLog("  setItem with label failed: " .. tostring(err))
+    end
+end
+
 -- Helper: clear pedestals (remove items and labels)
 local function clearPedestals()
     writeLog("clearPedestals called")
     -- Clear state tracking
     state.currentOptions = {}
     state.currentPedestalIndices = {}
+    state.lastSelectedPedestal = nil
     for i = 1, #PEDESTALS do
         if pedestals[i] then
             writeLog("Clearing pedestal " .. i)
@@ -296,6 +335,7 @@ local function createUI()
         :setBackground(colors.gray)
         :setForeground(colors.white)
         :onClick(function()
+            playNoteblockSound()
             if state.screen == 4 then
                 pcall(relayLock.setOutput, "bottom", true)  -- lock depositor
                 paymentCancelled = true
@@ -459,9 +499,7 @@ local function renderScreen5()
     clearPedestals()
     updateUI()
     -- Play noteblock sound
-    pcall(relayNote.setOutput, "front", true)
-    os.sleep(0.1)
-    pcall(relayNote.setOutput, "front", false)
+    playNoteblockSound()
     -- Log purchase
     local record = {
         timestamp = os.epoch("utc"),
@@ -525,21 +563,36 @@ local function eventLoop()
             end
             local side = (event == "pedestal_right_click") and "right" or "left"
             writeLog("side: " .. side .. ", screen: " .. state.screen)
+            -- Play sound on any pedestal click
+            playNoteblockSound()
             -- Determine action based on screen and mouse button
             local itemId = type(eventData[3]) == "table" and eventData[3].name
             local itemCount = type(eventData[3]) == "table" and eventData[3].count
+            local displayName = type(eventData[3]) == "table" and eventData[3].displayName
             -- Get pedestal index and option
             writeLog("eventData[2] type: " .. type(eventData[2]) .. " value: " .. tostring(eventData[2]))
-            -- Debug pedestalIndexByName
-            if eventData[2] then
-                writeLog("Checking if '" .. tostring(eventData[2]) .. "' is in pedestalIndexByName...")
-                for name, idx in pairs(pedestalIndexByName or {}) do
-                    if name == eventData[2] then
-                        writeLog("  Found match: " .. name .. " -> " .. idx)
+            local pedestalIndex = nil
+            if type(eventData[2]) == "table" then
+                -- eventData[2] is the pedestal object
+                pedestalIndex = pedestalObjectToIndex[eventData[2]]
+                if pedestalIndex then
+                    writeLog("Found pedestal index via object mapping: " .. pedestalIndex)
+                else
+                    -- Fallback: get name from object
+                    local pedestalName = peripheral.getName(eventData[2])
+                    writeLog("Object mapping failed, trying peripheral.getName: " .. tostring(pedestalName))
+                    if pedestalName then
+                        pedestalIndex = pedestalIndexByName[pedestalName]
+                        writeLog("Name mapping result: " .. tostring(pedestalIndex))
                     end
                 end
+            else
+                -- eventData[2] is already a name string
+                local pedestalName = eventData[2]
+                writeLog("Pedestal name as string: " .. tostring(pedestalName))
+                pedestalIndex = pedestalIndexByName[pedestalName]
+                writeLog("Name mapping result: " .. tostring(pedestalIndex))
             end
-            local pedestalIndex = eventData[2] and pedestalIndexByName[eventData[2]]
             writeLog("pedestalIndex lookup result: " .. tostring(pedestalIndex))
             local pedestalOption = pedestalIndex and state.currentOptions[pedestalIndex]
             writeLog("Pedestal index: " .. tostring(pedestalIndex) .. ", option: " .. (pedestalOption and "yes" or "no"))
@@ -552,10 +605,36 @@ local function eventLoop()
                 end
             end
             local selectedCount = nil
-            if pedestalOption and pedestalOption.count then
+            -- Try to extract count from displayName first (most reliable)
+            if displayName then
+                writeLog("DEBUG displayName value: " .. tostring(displayName) .. ", type: " .. type(displayName))
+                if type(displayName) == "number" then
+                    selectedCount = displayName
+                    writeLog("Using count from displayName (number): " .. selectedCount)
+                else
+                    local str = tostring(displayName)
+                    writeLog("displayName raw: '" .. str .. "' (type: " .. type(displayName) .. ")")
+                    -- Remove brackets and trim whitespace
+                    local cleanName = str:gsub("%[", ""):gsub("%]", ""):gsub("^%s*(.-)%s*$", "%1")
+                    writeLog("Clean displayName: '" .. cleanName .. "'")
+                    local num = tonumber(cleanName)
+                    if num then
+                        selectedCount = num
+                        writeLog("Using count from displayName (parsed): " .. selectedCount)
+                    else
+                        writeLog("displayName '" .. cleanName .. "' is not a number")
+                    end
+                end
+            end
+
+            -- Fallback to pedestal option count
+            if not selectedCount and pedestalOption and pedestalOption.count then
                 selectedCount = pedestalOption.count
                 writeLog("Using count from pedestal option: " .. selectedCount)
-            else
+            end
+
+            -- Final fallback to event count
+            if not selectedCount then
                 selectedCount = itemCount
                 writeLog("Using count from event: " .. tostring(itemCount))
             end
@@ -623,8 +702,29 @@ local function eventLoop()
                 end
             elseif state.screen == 3 then
                 -- Quantity selection: right-click choose, left-click back
+                -- Handle pedestal selection (visual feedback)
+                local isAlreadySelected = displayName and displayName:find("%[") and displayName:find("%]")
+                writeLog("isAlreadySelected: " .. tostring(isAlreadySelected))
+
                 if side == "right" then
-                    -- Determine which quantity option
+                    if pedestalIndex and pedestalOption and not isAlreadySelected then
+                        -- First click on pedestal - select it visually
+                        -- Deselect previous pedestal
+                        if state.lastSelectedPedestal and state.lastSelectedPedestal ~= pedestalIndex then
+                            writeLog("Deselecting previous pedestal: " .. state.lastSelectedPedestal)
+                            setPedestalSelection(state.lastSelectedPedestal, false)
+                        end
+                        -- Select current pedestal
+                        writeLog("Selecting pedestal: " .. pedestalIndex)
+                        setPedestalSelection(pedestalIndex, true)
+                        state.lastSelectedPedestal = pedestalIndex
+                        -- Don't proceed to quantity selection yet - wait for second click
+                        writeLog("Pedestal selected visually, waiting for second click to confirm quantity")
+                    else
+                        -- Either second click on already selected pedestal, or pedestal info missing
+                        -- Proceed with quantity selection
+                        writeLog("Proceeding with quantity selection (second click or missing pedestal info)")
+                        -- Determine which quantity option
                     local stock = getAE2Stock(state.selectedMaterial.item)
                     writeLog("Stock for " .. state.selectedMaterial.item .. ": " .. stock)
                     local quantities = {}
