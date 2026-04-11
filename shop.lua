@@ -10,9 +10,15 @@ local function writeLog(msg)
     local ts = string.format("[%04d-%02d-%02d %02d:%02d:%02d]",
         t.year, t.month, t.day, t.hour, t.min, t.sec)
     local line = ts .. " " .. msg
-    local prev = term.redirect(term.native())
-    print(line)
-    term.redirect(prev)
+    local prev
+    local ok1, err1 = pcall(function() prev = term.redirect(term.native()) end)
+    if ok1 and prev then
+        print(line)
+        pcall(term.redirect, prev)
+    else
+        -- Fallback: just print to current terminal
+        print(line)
+    end
     local f = fs.open(LOG_FILE, "a")
     if f then
         f.writeLine(line)
@@ -102,6 +108,7 @@ local renderCurrentScreen
 
 -- Peripheral wrappers (initialized after validation)
 local relayLock, ae2Adapter, depositor, relayNote, monitor, pedestals
+local pedestalIndexByName, pedestalObjectToIndex
 
 -- Initialize peripherals
 local function initPeripherals()
@@ -144,8 +151,8 @@ local function initPeripherals()
         end
     end
     -- Ensure monitor is cleared and set text scale
-    monitor.setTextScale(0.5)
-    monitor.clear()
+    pcall(monitor.setTextScale, 0.5)
+    pcall(monitor.clear)
     -- Lock depositor on startup
     pcall(relayLock.setOutput, "bottom", true)
 end
@@ -469,14 +476,17 @@ local function renderScreen4()
     -- Unlock relay (bottom output LOW)
     pcall(relayLock.setOutput, "bottom", false)
     os.sleep(0.3)
-    local baseline = relayLock.getInput("bottom")
+    local baseline = false
+    local ok, result = pcall(relayLock.getInput, "bottom")
+    if ok then baseline = result end
     local paid = false
     local deadline = os.clock() + 300  -- 5 minute payment timeout
     paymentCancelled = false
     while os.clock() < deadline and not paid and not paymentCancelled do
         -- Check for cancel request (handled by cancel button)
         -- Check for payment detection
-        if relayLock.getInput("bottom") ~= baseline then
+        local ok, current = pcall(relayLock.getInput, "bottom")
+        if ok and current ~= baseline then
             paid = true
             break
         end
@@ -579,7 +589,9 @@ local function eventLoop()
                     writeLog("Found pedestal index via object mapping: " .. pedestalIndex)
                 else
                     -- Fallback: get name from object
-                    local pedestalName = peripheral.getName(eventData[2])
+                    local pedestalName
+                    local ok, name = pcall(peripheral.getName, eventData[2])
+                    if ok then pedestalName = name end
                     writeLog("Object mapping failed, trying peripheral.getName: " .. tostring(pedestalName))
                     if pedestalName then
                         pedestalIndex = pedestalIndexByName[pedestalName]
@@ -703,7 +715,7 @@ local function eventLoop()
             elseif state.screen == 3 then
                 -- Quantity selection: right-click choose, left-click back
                 -- Handle pedestal selection (visual feedback)
-                local isAlreadySelected = displayName and displayName:find("%[") and displayName:find("%]")
+                local isAlreadySelected = displayName and tostring(displayName):find("%[") and tostring(displayName):find("%]")
                 writeLog("isAlreadySelected: " .. tostring(isAlreadySelected))
 
                 if side == "right" then
@@ -771,6 +783,7 @@ local function eventLoop()
                             -- Stay on screen 3, maybe show error message
                         end
                     end
+                end
                 elseif side == "left" then
                     state.screen = 2
                     renderCurrentScreen()
