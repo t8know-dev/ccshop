@@ -146,8 +146,8 @@ local function getAE2Stock(itemName)
     end
     writeLog("getAE2Stock: itemName=" .. tostring(itemName) .. ", total objects=" .. #objects)
     for i, obj in ipairs(objects) do
-        writeLog("  obj[" .. i .. "]: name=" .. tostring(obj.name) .. ", amount=" .. tostring(obj.amount) .. ", displayName=" .. tostring(obj.displayName))
-        if obj.name == itemName then
+        writeLog("  obj[" .. i .. "]: id=" .. tostring(obj.id) .. ", name=" .. tostring(obj.name) .. ", amount=" .. tostring(obj.amount) .. ", displayName=" .. tostring(obj.displayName))
+        if obj.id == itemName then
             writeLog("  -> MATCH, returning amount " .. tostring(obj.amount or 0))
             return obj.amount or 0
         end
