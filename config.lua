@@ -10,12 +10,12 @@ MONITOR        = "monitor_1012"
 
 -- Pedestal list: left→right display order; script centers options
 PEDESTALS = {
-  "display_pedestal_5",  -- leftmost
-  "display_pedestal_7",
-  "display_pedestal_9",
-  "display_pedestal_12",
+  "display_pedestal_12",  -- leftmost
   "display_pedestal_10",
-  "display_pedestal_11",   -- rightmost
+  "display_pedestal_11",
+  "display_pedestal_5",
+  "display_pedestal_9",
+  "display_pedestal_7",   -- rightmost
 }
 
 -- Timing (seconds)
