@@ -94,6 +94,9 @@ local state = {
 }
 local paymentCancelled = false
 
+-- Forward declaration for renderCurrentScreen (defined later)
+local renderCurrentScreen
+
 -- Peripheral wrappers (initialized after validation)
 local relayLock, ae2Adapter, depositor, relayNote, monitor, pedestals
 
@@ -387,7 +390,7 @@ local function renderScreen5()
 end
 
 -- Update screen based on state
-local function renderCurrentScreen()
+renderCurrentScreen = function()
     state.lastActivity = os.clock()
     if state.screen == 1 then renderScreen1()
     elseif state.screen == 2 then renderScreen2()
