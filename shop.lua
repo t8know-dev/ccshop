@@ -569,15 +569,19 @@ local function eventLoop()
                 if side == "right" then
                     -- Determine which quantity option
                     local stock = getAE2Stock(state.selectedMaterial.item)
+                    writeLog("Stock for " .. state.selectedMaterial.item .. ": " .. stock)
                     local quantities = {}
                     local startIdx = findQuantityIndex(state.selectedMaterial.minQty)
                     if not startIdx then startIdx = 1 end
+                    writeLog("minQty: " .. state.selectedMaterial.minQty .. ", startIdx: " .. startIdx)
                     for i = startIdx, #QUANTITIES do
                         local qtyNum = quantityToNumber(QUANTITIES[i])
                         if qtyNum <= stock then
                             table.insert(quantities, qtyNum)
                         else break end
                     end
+                    writeLog("Generated quantities: " .. table.concat(quantities, ", "))
+                    writeLog("itemCount: " .. tostring(itemCount))
                     local qtyIdx = nil
                     -- Try to find quantity by item count from event
                     if itemCount then
@@ -598,6 +602,17 @@ local function eventLoop()
                         renderCurrentScreen()
                     else
                         writeLog("No quantity found for itemCount " .. tostring(itemCount))
+                        -- Fallback: select first available quantity if any
+                        if #quantities > 0 then
+                            qtyIdx = 1
+                            writeLog("Fallback: selecting first quantity index: " .. qtyIdx .. " value: " .. quantities[qtyIdx])
+                            state.selectedQty = quantities[qtyIdx]
+                            state.screen = 4
+                            renderCurrentScreen()
+                        else
+                            writeLog("No quantities available (stock insufficient)")
+                            -- Stay on screen 3, maybe show error message
+                        end
                     end
                 elseif side == "left" then
                     state.screen = 2
