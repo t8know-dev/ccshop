@@ -316,7 +316,7 @@ local function checkPaymentDetection()
             state.paymentPaid = false
             renderCurrentScreen()
         else
-            local ok, current = pcall(relayLock.getInput, 'bottom')
+            local ok, current = pcall(relayLock.getInput, 'top')
             if ok and current ~= state.paymentBaseline then
                 writeLog('Payment detected')
                 pcall(relayLock.setOutput, 'bottom', true)  -- lock depositor

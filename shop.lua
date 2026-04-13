@@ -418,6 +418,7 @@ local function createUI()
             state.subState = nil
             state.cancelRequested = false
             state.paymentCheckCount = 0
+            state.paymentBaseline = nil
             renderCurrentScreen()
         end)
     if cancelButton and cancelButton.setVisible then
@@ -606,18 +607,19 @@ local function renderScreen3Confirming()
     -- Unlock depositor and establish baseline for payment detection
     pcall(relayLock.setOutput, "bottom", false)
     os.sleep(0.3)
-    local baseline = false
-    local ok, result = pcall(relayLock.getInput, "bottom")
-    writeLog("DEBUG", "Baseline check: ok=" .. tostring(ok) .. ", result=" .. tostring(result))
-    if ok then baseline = result end
-    state.paymentBaseline = baseline
+    -- Get baseline for all sides
+    local baselineTable = getAllRelayInputs()
+    state.paymentBaseline = baselineTable
     state.paymentDeadline = os.clock() + PAYMENT_TIMEOUT
     state.paymentPaid = false
     state.cancelRequested = false
     state.paymentCheckCount = 0
 
-    writeLog("INFO", "Depositor unlocked, baseline: " .. tostring(baseline) .. ", deadline: " .. state.paymentDeadline)
-    if baseline then
+    -- Log baseline for top side (for compatibility)
+    local topBaseline = baselineTable["top"] or false
+    writeLog("INFO", "Depositor unlocked, baseline (top side): " .. tostring(topBaseline) .. ", deadline: " .. state.paymentDeadline)
+    debugRelayInputs()  -- Log all sides for debugging
+    if topBaseline then
         writeLog("INFO", "Waiting for LOW signal (transition away from HIGH) for payment detection")
     else
         writeLog("INFO", "Waiting for HIGH signal (transition away from LOW) for payment detection")
@@ -655,6 +657,7 @@ local function renderScreen4()
     state.paymentPaid = false
     state.cancelRequested = false
     state.paymentCheckCount = 0
+    state.paymentBaseline = nil
     renderCurrentScreen()
 end
 
@@ -806,6 +809,8 @@ local function handleScreen2Click(pedestalIndex, pedestalOption, side, itemId)
     elseif side == 'left' then
         -- Back to screen 1
         state.screen = 1
+        state.paymentBaseline = nil
+        state.paymentCheckCount = 0
         renderCurrentScreen()
     end
 end
@@ -826,6 +831,8 @@ local function handleScreen3Click(pedestalIndex, pedestalOption, side, selectedC
             -- LMB goes back to material selection
             state.screen = 2
             state.subState = nil
+            state.paymentBaseline = nil
+            state.paymentCheckCount = 0
             renderCurrentScreen()
         end
     elseif state.subState == 'confirming' then
@@ -840,6 +847,8 @@ local function handleScreen3Click(pedestalIndex, pedestalOption, side, selectedC
             -- LMB goes back to quantity selection, lock depositor
             pcall(relayLock.setOutput, 'bottom', true)
             state.subState = 'selecting'
+            state.paymentBaseline = nil
+            state.paymentCheckCount = 0
             renderCurrentScreen()
         end
     end
@@ -897,11 +906,41 @@ local function checkIdleTimeout()
             state.subState = nil
             state.paymentPaid = false
             state.paymentCheckCount = 0
+            state.paymentBaseline = nil
             renderCurrentScreen()
             hintLabel:setText(MSG.timeout_msg)
             os.sleep(2)
         end
     end
+end
+
+-- Get all relay input sides as table side->value
+local function getAllRelayInputs()
+    local sides = {"bottom", "top", "front", "back", "left", "right"}
+    local inputs = {}
+    for _, side in ipairs(sides) do
+        local ok, val = pcall(relayLock.getInput, side)
+        if ok then
+            inputs[side] = val
+        else
+            inputs[side] = nil
+        end
+    end
+    return inputs
+end
+
+-- Debug: log all relay input sides
+local function debugRelayInputs()
+    local inputs = getAllRelayInputs()
+    local results = {}
+    for side, val in pairs(inputs) do
+        if val ~= nil then
+            table.insert(results, side .. "=" .. tostring(val))
+        else
+            table.insert(results, side .. "=error")
+        end
+    end
+    writeLog("DEBUG", "Relay inputs: " .. table.concat(results, ", "))
 end
 
 -- Check payment detection
@@ -918,20 +957,39 @@ local function checkPaymentDetection()
             state.subState = nil
             state.paymentPaid = false
             state.paymentCheckCount = 0
+            state.paymentBaseline = nil
             renderCurrentScreen()
         else
             state.paymentCheckCount = state.paymentCheckCount + 1
             if state.paymentCheckCount % 10 == 0 then
                 writeLog("DEBUG", "Payment detection check #" .. state.paymentCheckCount .. ", deadline in " .. (state.paymentDeadline - os.clock()) .. "s")
             end
-            local ok, current = pcall(relayLock.getInput, 'bottom')
-            writeLog("DEBUG", "Payment detection: ok=" .. tostring(ok) .. ", current=" .. tostring(current) .. ", baseline=" .. tostring(state.paymentBaseline))
-            if ok and current ~= state.paymentBaseline then
-                writeLog("INFO", "Payment detected! current=" .. tostring(current) .. " baseline=" .. tostring(state.paymentBaseline))
+            if state.paymentCheckCount % 20 == 0 then
+                debugRelayInputs()
+            end
+            -- Check all relay sides for payment signal
+            local currentInputs = getAllRelayInputs()
+            local paymentDetected = false
+            local changedSide = nil
+            for side, baselineVal in pairs(state.paymentBaseline) do
+                local currentVal = currentInputs[side]
+                if currentVal ~= nil and currentVal ~= baselineVal then
+                    paymentDetected = true
+                    changedSide = side
+                    break
+                end
+            end
+            if paymentDetected then
+                writeLog("INFO", "Payment detected on side " .. tostring(changedSide) .. "! current=" .. tostring(currentInputs[changedSide]) .. " baseline=" .. tostring(state.paymentBaseline[changedSide]))
                 pcall(relayLock.setOutput, 'bottom', true)  -- lock depositor
                 state.paymentPaid = true
                 state.screen = 4  -- Move to thank you screen
                 renderCurrentScreen()
+            else
+                -- Log only occasionally to avoid spam
+                if state.paymentCheckCount % 30 == 0 then
+                    writeLog("DEBUG", "Payment detection check #" .. state.paymentCheckCount .. ", no change on any side")
+                end
             end
         end
     end
