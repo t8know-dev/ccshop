@@ -660,9 +660,17 @@ local function eventLoop()
         -- Pedestal click events from display_pedestal peripheral
         if event ~= nil and (event == "pedestal_left_click" or event == "pedestal_right_click") then
             writeLog("Pedestal event: " .. event .. " on " .. tostring(eventData[2]))
+            writeLog("Event data[2] type: " .. type(eventData[2]))
+            -- Log mapping tables for debugging
+            writeLog("pedestalObjectToIndex count: " .. tostring(pedestalObjectToIndex and #pedestalObjectToIndex or 0))
+            writeLog("pedestalIndexByName count: " .. tostring(pedestalIndexByName and #pedestalIndexByName or 0))
             if type(eventData[3]) == "table" then
                 local info = "name=" .. tostring(eventData[3].name) .. " count=" .. tostring(eventData[3].count) .. " displayName=" .. tostring(eventData[3].displayName)
                 writeLog("Event data[3]: " .. info)
+                writeLog("Full eventData[3] table:")
+                for k, v in pairs(eventData[3]) do
+                    writeLog("  " .. tostring(k) .. " = " .. tostring(v))
+                end
             else
                 writeLog("Event data[3]: " .. type(eventData[3]))
             end
@@ -701,6 +709,16 @@ local function eventLoop()
                 writeLog("Name mapping result: " .. tostring(pedestalIndex))
             end
             writeLog("pedestalIndex lookup result: " .. tostring(pedestalIndex))
+            if not pedestalIndex then
+                writeLog("DEBUG: pedestalIndexByName keys:")
+                for name, idx in pairs(pedestalIndexByName) do
+                    writeLog("  " .. name .. " -> " .. idx)
+                end
+                writeLog("DEBUG: pedestalObjectToIndex keys:")
+                for obj, idx in pairs(pedestalObjectToIndex) do
+                    writeLog("  " .. tostring(obj) .. " -> " .. idx)
+                end
+            end
             local pedestalOption = pedestalIndex and state.currentOptions[pedestalIndex]
             writeLog("Pedestal index: " .. tostring(pedestalIndex) .. ", option: " .. (pedestalOption and "yes" or "no"))
             if pedestalOption then
@@ -709,6 +727,18 @@ local function eventLoop()
                 writeLog("Current options state:")
                 for idx, opt in pairs(state.currentOptions) do
                     writeLog("  idx " .. idx .. ": item=" .. tostring(opt.item) .. " label=" .. tostring(opt.label) .. " count=" .. tostring(opt.count))
+                end
+                -- Fallback: try to find option by itemId
+                if itemId and not pedestalOption then
+                    writeLog("Fallback search for itemId: " .. itemId)
+                    for idx, opt in pairs(state.currentOptions) do
+                        if opt.item == itemId or (opt.item and itemId:match("^[^:]+") == opt.item:match("^[^:]+")) then
+                            writeLog("Found matching option at index " .. idx)
+                            pedestalOption = opt
+                            pedestalIndex = idx
+                            break
+                        end
+                    end
                 end
             end
             local selectedCount = nil
@@ -749,9 +779,15 @@ local function eventLoop()
             if state.screen == 1 then
                 -- Category selection: right-click only
                 if side == "right" then
+                    writeLog("Screen 1 right-click, itemId=" .. tostring(itemId))
+                    writeLog("CATEGORIES count: " .. #CATEGORIES)
+                    for i, cat in ipairs(CATEGORIES) do
+                        writeLog("  " .. i .. ": item=" .. cat.item .. " label=" .. cat.label)
+                    end
                     local catIdx = nil
                     -- Try to find category by itemId first (most reliable)
                     if itemId then
+                        -- Exact match
                         for i, cat in ipairs(CATEGORIES) do
                             if cat.item == itemId then
                                 catIdx = i
@@ -759,7 +795,20 @@ local function eventLoop()
                             end
                         end
                         if catIdx then
-                            writeLog("Found category by itemId: " .. tostring(itemId) .. " index: " .. catIdx)
+                            writeLog("Found category by exact itemId: " .. tostring(itemId) .. " index: " .. catIdx)
+                        else
+                            -- Try prefix match (ignore metadata after colon)
+                            local prefix = itemId:match("^[^:]+")
+                            writeLog("Trying prefix match, prefix=" .. tostring(prefix))
+                            if prefix then
+                                for i, cat in ipairs(CATEGORIES) do
+                                    if cat.item == prefix or cat.item:match("^[^:]+") == prefix then
+                                        catIdx = i
+                                        writeLog("Matched category by prefix: " .. cat.item)
+                                        break
+                                    end
+                                end
+                            end
                         end
                     end
                     if catIdx then
@@ -784,6 +833,7 @@ local function eventLoop()
                     local matIdx = nil
                     -- Try to find material by itemId first
                     if itemId then
+                        -- Exact match
                         for i, mat in ipairs(materialsInCategory) do
                             if mat.item == itemId then
                                 matIdx = i
@@ -791,7 +841,20 @@ local function eventLoop()
                             end
                         end
                         if matIdx then
-                            writeLog("Found material by itemId: " .. tostring(itemId) .. " index: " .. matIdx)
+                            writeLog("Found material by exact itemId: " .. tostring(itemId) .. " index: " .. matIdx)
+                        else
+                            -- Try prefix match (ignore metadata after colon)
+                            local prefix = itemId:match("^[^:]+")
+                            writeLog("Trying prefix match, prefix=" .. tostring(prefix))
+                            if prefix then
+                                for i, mat in ipairs(materialsInCategory) do
+                                    if mat.item == prefix or mat.item:match("^[^:]+") == prefix then
+                                        matIdx = i
+                                        writeLog("Matched material by prefix: " .. mat.item)
+                                        break
+                                    end
+                                end
+                            end
                         end
                     end
                     if matIdx then
