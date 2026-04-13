@@ -384,7 +384,7 @@ local function updateUI()
             -- Show base price and hint
             local basePriceStr = ""
             if state.selectedMaterial then
-                basePriceStr = string.format(MSG.screen3_base_price, state.selectedMaterial.basePrice, state.selectedMaterial.minQty) .. " | "
+                basePriceStr = string.format(MSG.screen3_base_price, state.selectedMaterial.basePrice, tostring(state.selectedMaterial.minQty)) .. " | "
             end
             hintLabel:setText(basePriceStr .. MSG.screen3_hint_select)
             if cancelButton and cancelButton.setVisible then cancelButton:setVisible(true) end
@@ -574,7 +574,7 @@ local function renderScreen4()
         category = state.selectedCategory,
         item = state.selectedMaterial.item,
         qty = state.selectedQty,
-        price = math.floor(state.selectedMaterial.basePrice * (state.selectedQty / state.selectedMaterial.minQty))
+        price = state.calculatedPrice or math.floor(state.selectedMaterial.basePrice * (state.selectedQty / state.selectedMaterial.minQty))
     }
     pcall(db.log, record)
     -- Mock dispense
@@ -957,6 +957,7 @@ local function eventLoop()
         end
 
         os.sleep(0.05)
+    end
 end
 
 -- Main
