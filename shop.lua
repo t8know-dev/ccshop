@@ -123,6 +123,9 @@ local state = {
 -- Forward declaration for renderCurrentScreen (defined later)
 local renderCurrentScreen
 
+-- Forward declarations for relay helper functions
+local getAllRelayInputs, debugRelayInputs
+
 -- Peripheral wrappers (initialized after validation)
 local relayLock, ae2Adapter, depositor, relayNote, monitor, pedestals
 local pedestalIndexByName, pedestalObjectToIndex
@@ -916,6 +919,10 @@ end
 
 -- Get all relay input sides as table side->value
 local function getAllRelayInputs()
+    if not relayLock then
+        writeLog("ERROR", "relayLock is nil in getAllRelayInputs")
+        return {}
+    end
     local sides = {"bottom", "top", "front", "back", "left", "right"}
     local inputs = {}
     for _, side in ipairs(sides) do
