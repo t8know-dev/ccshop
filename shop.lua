@@ -5,11 +5,21 @@ local basalt = require("basalt")
 
 -- Debug logging
 local LOG_FILE = "/ccshop/shop_debug.log"
-local function writeLog(msg)
+local LOG_LEVELS = {DEBUG = 1, INFO = 2, WARN = 3, ERROR = 4}
+local CURRENT_LOG_LEVEL = LOG_LEVELS[LOG_LEVEL] or LOG_LEVELS.INFO
+
+local function writeLog(level, msg)
+    -- Support old signature: single argument defaults to INFO
+    if msg == nil then
+        msg = level
+        level = "INFO"
+    end
+    if LOG_LEVELS[level] < CURRENT_LOG_LEVEL then return end
+
     local t = os.date("*t")
     local ts = string.format("[%04d-%02d-%02d %02d:%02d:%02d]",
         t.year, t.month, t.day, t.hour, t.min, t.sec)
-    local line = ts .. " " .. msg
+    local line = ts .. " [" .. level .. "] " .. msg
     local prev
     local ok1, err1 = pcall(function() prev = term.redirect(term.native()) end)
     if ok1 and prev then
@@ -115,45 +125,50 @@ local renderCurrentScreen
 -- Peripheral wrappers (initialized after validation)
 local relayLock, ae2Adapter, depositor, relayNote, monitor, pedestals
 local pedestalIndexByName, pedestalObjectToIndex
+local ae2Cache = {
+    timestamp = 0,
+    data = {},
+    ttl = AE2_CACHE_TTL or 30
+}
 
 -- Initialize peripherals
 local function initPeripherals()
-    writeLog("Initializing peripherals")
+    writeLog("INFO", "Initializing peripherals")
     relayLock = peripheral.wrap(RELAY_LOCK)
-    writeLog("RELAY_LOCK wrapped: " .. tostring(relayLock))
+    writeLog("DEBUG", "RELAY_LOCK wrapped: " .. tostring(relayLock))
     ae2Adapter = peripheral.wrap(AE2_ADAPTER)
     if not ae2Adapter then
-        writeLog("AE2_ADAPTER wrap failed, trying peripheral.find(\"ae2cc_adapter\")")
+        writeLog("DEBUG", "AE2_ADAPTER wrap failed, trying peripheral.find(\"ae2cc_adapter\")")
         ae2Adapter = peripheral.find("ae2cc_adapter")
     end
-    writeLog("AE2_ADAPTER wrapped: " .. tostring(ae2Adapter) .. " (name: " .. AE2_ADAPTER .. ")")
+    writeLog("DEBUG", "AE2_ADAPTER wrapped: " .. tostring(ae2Adapter) .. " (name: " .. AE2_ADAPTER .. ")")
     depositor = peripheral.wrap(DEPOSITOR)
-    writeLog("DEPOSITOR wrapped: " .. tostring(depositor))
+    writeLog("DEBUG", "DEPOSITOR wrapped: " .. tostring(depositor))
     relayNote = peripheral.wrap(RELAY_NOTE)
-    writeLog("RELAY_NOTE wrapped: " .. tostring(relayNote))
+    writeLog("DEBUG", "RELAY_NOTE wrapped: " .. tostring(relayNote))
     monitor = peripheral.wrap(MONITOR)
-    writeLog("MONITOR wrapped: " .. tostring(monitor))
+    writeLog("DEBUG", "MONITOR wrapped: " .. tostring(monitor))
     pedestals = {}
     for i, name in ipairs(PEDESTALS) do
         pedestals[i] = peripheral.wrap(name)
         if pedestals[i] then
-            writeLog("Pedestal " .. i .. ": " .. name .. " wrapped successfully")
+            writeLog("DEBUG", "Pedestal " .. i .. ": " .. name .. " wrapped successfully")
         else
-            writeLog("Pedestal " .. i .. ": " .. name .. " failed to wrap")
+    writeLog("WARN", "Pedestal " .. i .. ": " .. name .. " failed to wrap")
         end
     end
     -- Create name->index mapping
     pedestalIndexByName = {}
     for i, name in ipairs(PEDESTALS) do
         pedestalIndexByName[name] = i
-        writeLog("Pedestal mapping: " .. name .. " -> " .. i)
+        writeLog("DEBUG", "Pedestal mapping: " .. name .. " -> " .. i)
     end
     -- Create object->index mapping
     pedestalObjectToIndex = {}
     for i, ped in ipairs(pedestals) do
         if ped then
             pedestalObjectToIndex[ped] = i
-            writeLog("Pedestal object mapping: " .. tostring(ped) .. " -> " .. i)
+            writeLog("DEBUG", "Pedestal object mapping: " .. tostring(ped) .. " -> " .. i)
         end
     end
     -- Ensure monitor is cleared and set text scale
@@ -163,43 +178,82 @@ local function initPeripherals()
     pcall(relayLock.setOutput, "bottom", true)
 end
 
--- Helper: get AE2 stock for an item name
-local function getAE2Stock(itemName)
+-- Helper: refresh AE2 stock cache
+local function refreshAE2Cache()
     if not ae2Adapter then
-        writeLog("AE2 adapter not initialized, returning stock 0")
-        return 0
+        writeLog("DEBUG", "AE2 adapter not available, cannot refresh cache")
+        return
     end
     local ok, objects = pcall(ae2Adapter.getAvailableObjects)
-    if not ok then
-        writeLog("AE2 adapter error: " .. tostring(objects))
+    if ok then
+        ae2Cache.data = {}
+        for _, obj in ipairs(objects) do
+            ae2Cache.data[obj.id] = obj.amount or 0
+        end
+        ae2Cache.timestamp = os.clock()
+        writeLog("DEBUG", "AE2 cache refreshed: " .. #objects .. " items")
+    else
+        writeLog("ERROR", "AE2 cache refresh failed: " .. tostring(objects))
+    end
+end
+
+-- Helper: get AE2 stock for an item name (with caching)
+local function getAE2Stock(itemName)
+    -- Refresh cache if stale
+    if os.clock() - ae2Cache.timestamp > ae2Cache.ttl then
+        writeLog("DEBUG", "AE2 cache stale, refreshing")
+        refreshAE2Cache()
+    end
+
+    if not ae2Adapter then
+        writeLog("WARN", "AE2 adapter not initialized, returning stock 0")
         return 0
     end
-    writeLog("getAE2Stock: itemName=" .. tostring(itemName) .. ", total objects=" .. #objects)
-    for i, obj in ipairs(objects) do
-        writeLog("  obj[" .. i .. "]: id=" .. tostring(obj.id) .. ", name=" .. tostring(obj.name) .. ", amount=" .. tostring(obj.amount) .. ", displayName=" .. tostring(obj.displayName))
+
+    -- Check cache first
+    if ae2Cache.data[itemName] ~= nil then
+        local amount = ae2Cache.data[itemName]
+        writeLog("DEBUG", "getAE2Stock cache hit: " .. itemName .. " -> " .. amount)
+        return amount
+    end
+
+    -- Fallback to direct query (should not happen if cache is fresh)
+    writeLog("DEBUG", "getAE2Stock cache miss: " .. itemName .. ", performing direct query")
+    local ok, objects = pcall(ae2Adapter.getAvailableObjects)
+    if not ok then
+        writeLog("ERROR", "AE2 adapter error: " .. tostring(objects))
+        return 0
+    end
+
+    for _, obj in ipairs(objects) do
         if obj.id == itemName then
-            writeLog("  -> MATCH, returning amount " .. tostring(obj.amount or 0))
-            return obj.amount or 0
+            local amount = obj.amount or 0
+            -- Update cache
+            ae2Cache.data[itemName] = amount
+            writeLog("DEBUG", "getAE2Stock direct match: " .. itemName .. " -> " .. amount)
+            return amount
         end
     end
-    writeLog("  No match found")
+
+    writeLog("DEBUG", "getAE2Stock no match for " .. itemName)
+    ae2Cache.data[itemName] = 0  -- Cache miss as zero to avoid repeated queries
     return 0
 end
 
 -- Helper: play noteblock sound
 local function playNoteblockSound()
-    writeLog("Playing noteblock sound")
+    writeLog("DEBUG", "Playing noteblock sound")
     pcall(relayNote.setOutput, "front", true)
-    os.sleep(0.1)
+    os.sleep(0.05)
     pcall(relayNote.setOutput, "front", false)
 end
 
 -- Helper: set pedestal label with selection brackets
 local function setPedestalSelection(pedestalIdx, selected)
-    writeLog("setPedestalSelection: idx=" .. pedestalIdx .. ", selected=" .. tostring(selected))
+    writeLog("DEBUG", "setPedestalSelection: idx=" .. pedestalIdx .. ", selected=" .. tostring(selected))
     local opt = state.currentOptions[pedestalIdx]
     if not opt or not pedestals[pedestalIdx] then
-        writeLog("  No option or pedestal for index " .. pedestalIdx)
+        writeLog("DEBUG", "  No option or pedestal for index " .. pedestalIdx)
         return
     end
 
@@ -208,28 +262,28 @@ local function setPedestalSelection(pedestalIdx, selected)
         label = "[ " .. label .. " ]"
     end
 
-    writeLog("  Setting pedestal " .. pedestalIdx .. " label: " .. label)
+    writeLog("DEBUG", "  Setting pedestal " .. pedestalIdx .. " label: " .. label)
     local ok, err = pcall(pedestals[pedestalIdx].setItem, opt.item, label)
     if not ok then
-        writeLog("  setItem with label failed: " .. tostring(err))
+        writeLog("WARN", "  setItem with label failed: " .. tostring(err))
     end
 end
 
 -- Helper: clear pedestals (remove items and labels)
 local function clearPedestals()
-    writeLog("clearPedestals called")
+    writeLog("DEBUG", "clearPedestals called")
     -- Clear state tracking
     state.currentOptions = {}
     state.currentPedestalIndices = {}
     state.lastSelectedPedestal = nil
     for i = 1, #PEDESTALS do
         if pedestals[i] then
-            writeLog("Clearing pedestal " .. i)
+            writeLog("DEBUG", "Clearing pedestal " .. i)
             pcall(pedestals[i].setItem, nil)
             local ok1, err1 = pcall(pedestals[i].setItemRendered, false)
             local ok2, err2 = pcall(pedestals[i].setLabelRendered, false)
-            if not ok1 then writeLog("  setItemRendered failed: " .. tostring(err1)) end
-            if not ok2 then writeLog("  setLabelRendered failed: " .. tostring(err2)) end
+            if not ok1 then writeLog("WARN", "  setItemRendered failed: " .. tostring(err1)) end
+            if not ok2 then writeLog("WARN", "  setLabelRendered failed: " .. tostring(err2)) end
         end
     end
 end
@@ -244,16 +298,16 @@ local function centerPedestalIndices(numOptions)
     for i = start, start + numOptions - 1 do
         table.insert(indices, i)
     end
-    writeLog("centerPedestalIndices: numOptions=" .. numOptions .. " total=" .. total .. " start=" .. start .. " indices: " .. table.concat(indices, ","))
+    writeLog("DEBUG", "centerPedestalIndices: numOptions=" .. numOptions .. " total=" .. total .. " start=" .. start .. " indices: " .. table.concat(indices, ","))
     return indices
 end
 
 -- Helper: update pedestals with items and labels
 local function setPedestalOptions(options)
     -- options: array of {item=, label=, count=}
-    writeLog("setPedestalOptions called with " .. #options .. " options")
+    writeLog("INFO", "setPedestalOptions called with " .. #options .. " options")
     for i, opt in ipairs(options) do
-        writeLog("  option " .. i .. ": item=" .. tostring(opt.item) .. " label=" .. tostring(opt.label) .. " count=" .. tostring(opt.count))
+        writeLog("DEBUG", "  option " .. i .. ": item=" .. tostring(opt.item) .. " label=" .. tostring(opt.label) .. " count=" .. tostring(opt.count))
     end
     local indices = centerPedestalIndices(#options)
     -- Update state tracking
@@ -267,44 +321,44 @@ local function setPedestalOptions(options)
                 label = options[i].label,
                 count = options[i].count
             }
-            writeLog("State tracking: pedestal " .. idx .. " -> count=" .. tostring(options[i].count))
+            writeLog("DEBUG", "State tracking: pedestal " .. idx .. " -> count=" .. tostring(options[i].count))
         end
     end
-    writeLog("Current pedestal indices: " .. table.concat(indices, ","))
+    writeLog("DEBUG", "Current pedestal indices: " .. table.concat(indices, ","))
     -- Update used pedestals
     for i, idx in ipairs(indices) do
         local opt = options[i]
         if opt and pedestals[idx] then
-            writeLog("Setting pedestal " .. idx .. " with item=" .. tostring(opt.item) .. " label=" .. tostring(opt.label) .. " count=" .. tostring(opt.count))
+            writeLog("DEBUG", "Setting pedestal " .. idx .. " with item=" .. tostring(opt.item) .. " label=" .. tostring(opt.label) .. " count=" .. tostring(opt.count))
             -- Set item with optional label (count takes precedence over label)
             local label = opt.count and tostring(opt.count) or opt.label
             if opt.item then
                 if label then
-                    writeLog("  setItem: " .. opt.item .. " label: " .. label)
+                    writeLog("DEBUG", "  setItem: " .. opt.item .. " label: " .. label)
                     local ok, err = pcall(pedestals[idx].setItem, opt.item, label)
-                    if not ok then writeLog("    setItem with label failed: " .. tostring(err)) end
+                    if not ok then writeLog("WARN", "    setItem with label failed: " .. tostring(err)) end
                 else
-                    writeLog("  setItem: " .. opt.item)
+                    writeLog("DEBUG", "  setItem: " .. opt.item)
                     local ok, err = pcall(pedestals[idx].setItem, opt.item)
-                    if not ok then writeLog("    setItem failed: " .. tostring(err)) end
+                    if not ok then writeLog("WARN", "    setItem failed: " .. tostring(err)) end
                 end
                 local ok2, err2 = pcall(pedestals[idx].setItemRendered, true)
-                if not ok2 then writeLog("    setItemRendered failed: " .. tostring(err2)) end
+                if not ok2 then writeLog("WARN", "    setItemRendered failed: " .. tostring(err2)) end
                 -- Keep label rendering separate (optional)
                 if label then
                     local ok3, err3 = pcall(pedestals[idx].setLabelRendered, true)
-                    if not ok3 then writeLog("    setLabelRendered failed: " .. tostring(err3)) end
+                    if not ok3 then writeLog("WARN", "    setLabelRendered failed: " .. tostring(err3)) end
                 else
                     local ok3, err3 = pcall(pedestals[idx].setLabelRendered, false)
-                    if not ok3 then writeLog("    setLabelRendered(false) failed: " .. tostring(err3)) end
+                    if not ok3 then writeLog("WARN", "    setLabelRendered(false) failed: " .. tostring(err3)) end
                 end
             else
-                writeLog("  setItem: nil")
+                writeLog("DEBUG", "  setItem: nil")
                 pcall(pedestals[idx].setItem, nil)
                 local ok, err = pcall(pedestals[idx].setItemRendered, false)
-                if not ok then writeLog("    setItemRendered(false) failed: " .. tostring(err)) end
+                if not ok then writeLog("WARN", "    setItemRendered(false) failed: " .. tostring(err)) end
                 local ok2, err2 = pcall(pedestals[idx].setLabelRendered, false)
-                if not ok2 then writeLog("    setLabelRendered(false) failed: " .. tostring(err2)) end
+                if not ok2 then writeLog("WARN", "    setLabelRendered(false) failed: " .. tostring(err2)) end
             end
         end
     end
@@ -315,12 +369,12 @@ local function setPedestalOptions(options)
             if i == idx then used = true break end
         end
         if not used and pedestals[i] then
-            writeLog("Clearing unused pedestal " .. i)
+            writeLog("DEBUG", "Clearing unused pedestal " .. i)
             pcall(pedestals[i].setItem, nil)
             local ok1, err1 = pcall(pedestals[i].setItemRendered, false)
             local ok2, err2 = pcall(pedestals[i].setLabelRendered, false)
-            if not ok1 then writeLog("  setItemRendered(false) failed: " .. tostring(err1)) end
-            if not ok2 then writeLog("  setLabelRendered(false) failed: " .. tostring(err2)) end
+            if not ok1 then writeLog("WARN", "  setItemRendered(false) failed: " .. tostring(err1)) end
+            if not ok2 then writeLog("WARN", "  setLabelRendered(false) failed: " .. tostring(err2)) end
         end
     end
 end
@@ -367,7 +421,7 @@ local function createUI()
     if cancelButton and cancelButton.setVisible then
         cancelButton:setVisible(false)
     else
-        writeLog("ERROR: cancelButton invalid " .. tostring(cancelButton))
+        writeLog("ERROR", "cancelButton invalid " .. tostring(cancelButton))
     end
 end
 
@@ -403,55 +457,55 @@ end
 
 -- Screen 1: Category selection
 local function renderScreen1()
-    writeLog("Rendering screen 1 (categories)")
+    writeLog("INFO", "Rendering screen 1 (categories)")
     clearPedestals()
     local options = {}
     for _, cat in ipairs(CATEGORIES) do
         table.insert(options, { item = cat.item, label = cat.label })
     end
-    setPedestalOptions(options)
     updateUI()
+    setPedestalOptions(options)
 end
 
 -- Screen 2: Material selection (filtered by category and stock)
 local function renderScreen2()
-    writeLog("Rendering screen 2 (materials) for category: " .. tostring(state.selectedCategory))
+    writeLog("INFO", "Rendering screen 2 (materials) for category: " .. tostring(state.selectedCategory))
     clearPedestals()
     local options = {}
-    writeLog("MATERIALS total: " .. #MATERIALS)
+    writeLog("DEBUG", "MATERIALS total: " .. #MATERIALS)
     for idx, mat in ipairs(MATERIALS) do
         if mat.category == state.selectedCategory then
-            writeLog("Material " .. idx .. ": item=" .. mat.item .. ", label=" .. mat.label .. ", category=" .. mat.category .. ", minQty=" .. mat.minQty)
+            writeLog("DEBUG", "Material " .. idx .. ": item=" .. mat.item .. ", label=" .. mat.label .. ", category=" .. mat.category .. ", minQty=" .. mat.minQty)
             local stock = getAE2Stock(mat.item)
-            writeLog("  stock=" .. stock)
+            writeLog("DEBUG", "  stock=" .. stock)
             if stock >= mat.minQty then
-                writeLog("  -> qualifies")
+                writeLog("DEBUG", "  -> qualifies")
                 table.insert(options, { item = mat.item, label = mat.label })
             else
-                writeLog("  -> insufficient stock")
+                writeLog("DEBUG", "  -> insufficient stock")
             end
         else
-            writeLog("Material " .. idx .. ": item=" .. mat.item .. " category mismatch (" .. mat.category .. " vs " .. state.selectedCategory .. ")")
+            writeLog("DEBUG", "Material " .. idx .. ": item=" .. mat.item .. " category mismatch (" .. mat.category .. " vs " .. state.selectedCategory .. ")")
         end
     end
-    writeLog("Available materials: " .. #options)
+    writeLog("INFO", "Available materials: " .. #options)
     if #options == 0 then
         -- No materials available, go back to screen 1
-        writeLog("No materials available, returning to screen 1")
+        writeLog("WARN", "No materials available, returning to screen 1")
         state.screen = 1
         renderCurrentScreen()
         return
     end
-    setPedestalOptions(options)
     updateUI()
+    setPedestalOptions(options)
 end
 
 -- Screen 3: Quantity selection (selecting sub-state)
 local function renderScreen3Selecting()
-    writeLog("Rendering screen 3 (selecting) for material: " .. tostring(state.selectedMaterial.item))
+    writeLog("INFO", "Rendering screen 3 (selecting) for material: " .. tostring(state.selectedMaterial.item))
     clearPedestals()
     local stock = getAE2Stock(state.selectedMaterial.item)
-    writeLog("Stock: " .. stock .. " minQty: " .. state.selectedMaterial.minQty)
+    writeLog("DEBUG", "Stock: " .. stock .. " minQty: " .. state.selectedMaterial.minQty)
     local quantities = {}
     local startIdx = findQuantityIndex(state.selectedMaterial.minQty)
     if not startIdx then startIdx = 1 end
@@ -463,11 +517,11 @@ local function renderScreen3Selecting()
             break
         end
     end
-    writeLog("Available quantities: " .. #quantities)
+    writeLog("INFO", "Available quantities: " .. #quantities)
     state.availableQuantities = quantities
     if #quantities == 0 then
         -- No quantities available (stock less than minQty) – should not happen
-        writeLog("No quantities available, returning to screen 2")
+        writeLog("WARN", "No quantities available, returning to screen 2")
         state.screen = 2
         renderCurrentScreen()
         return
@@ -476,17 +530,17 @@ local function renderScreen3Selecting()
     for _, qtyNum in ipairs(quantities) do
         table.insert(options, { item = state.selectedMaterial.item, label = tostring(qtyNum), count = qtyNum })
     end
-    setPedestalOptions(options)
     updateUI()
+    setPedestalOptions(options)
 end
 
 -- Screen 3: Payment (confirming sub-state)
 local function renderScreen3Confirming()
-    writeLog("Rendering screen 3 (confirming) for material: " .. tostring(state.selectedMaterial.item) .. " qty: " .. tostring(state.selectedQty))
+    writeLog("INFO", "Rendering screen 3 (confirming) for material: " .. tostring(state.selectedMaterial.item) .. " qty: " .. tostring(state.selectedQty))
 
     -- Ensure we have available quantities (should be set from screen 3)
     if not state.availableQuantities then
-        writeLog("ERROR: availableQuantities not set, recomputing")
+        writeLog("ERROR", "availableQuantities not set, recomputing")
         local stock = getAE2Stock(state.selectedMaterial.item)
         local quantities = {}
         local startIdx = findQuantityIndex(state.selectedMaterial.minQty)
@@ -499,6 +553,27 @@ local function renderScreen3Confirming()
         end
         state.availableQuantities = quantities
     end
+
+    -- Lock depositor first (in case we're changing quantity)
+    pcall(relayLock.setOutput, "bottom", true)
+
+    -- Calculate price
+    local price = math.floor(state.selectedMaterial.basePrice * (state.selectedQty / state.selectedMaterial.minQty))
+    state.calculatedPrice = price
+    writeLog("INFO", "Price calculated: " .. price .. " spurs for quantity " .. state.selectedQty)
+
+    -- Set depositor price
+    local ok, err = pcall(depositor.setTotalPrice, price)
+    if not ok then
+        hintLabel:setText(MSG.error_deposit)
+        os.sleep(2)
+        state.screen = 1
+        renderCurrentScreen()
+        return
+    end
+
+    -- Update UI (hint will show price and insert instruction)
+    updateUI()
 
     -- Create options for all available quantities
     local options = {}
@@ -519,29 +594,11 @@ local function renderScreen3Confirming()
                 label = "[ " .. label .. " ]"
                 state.lastSelectedPedestal = idx
             end
-            writeLog("Setting pedestal " .. idx .. " label: " .. label)
+            writeLog("DEBUG", "Setting pedestal " .. idx .. " label: " .. label)
             pcall(pedestals[idx].setItem, opt.item, label)
             pcall(pedestals[idx].setItemRendered, true)
             pcall(pedestals[idx].setLabelRendered, true)
         end
-    end
-
-    -- Lock depositor first (in case we're changing quantity)
-    pcall(relayLock.setOutput, "bottom", true)
-
-    -- Calculate price
-    local price = math.floor(state.selectedMaterial.basePrice * (state.selectedQty / state.selectedMaterial.minQty))
-    state.calculatedPrice = price
-    writeLog("Price calculated: " .. price .. " spurs for quantity " .. state.selectedQty)
-
-    -- Set depositor price
-    local ok, err = pcall(depositor.setTotalPrice, price)
-    if not ok then
-        hintLabel:setText(MSG.error_deposit)
-        os.sleep(2)
-        state.screen = 1
-        renderCurrentScreen()
-        return
     end
 
     -- Unlock depositor and establish baseline for payment detection
@@ -555,10 +612,7 @@ local function renderScreen3Confirming()
     state.paymentPaid = false
     state.cancelRequested = false
 
-    writeLog("Depositor unlocked, baseline: " .. tostring(baseline) .. ", deadline: " .. state.paymentDeadline)
-
-    -- Update UI (hint will be set by updateUI)
-    updateUI()
+    writeLog("INFO", "Depositor unlocked, baseline: " .. tostring(baseline) .. ", deadline: " .. state.paymentDeadline)
 end
 
 -- Screen 4: Thank you
@@ -577,8 +631,10 @@ local function renderScreen4()
         price = state.calculatedPrice or math.floor(state.selectedMaterial.basePrice * (state.selectedQty / state.selectedMaterial.minQty))
     }
     pcall(db.log, record)
+    -- Refresh AE2 cache after purchase (stock changed)
+    refreshAE2Cache()
     -- Mock dispense
-    writeLog("[MOCK] Dispense " .. state.selectedQty .. "x " .. state.selectedMaterial.item)
+    writeLog("INFO", "[MOCK] Dispense " .. state.selectedQty .. "x " .. state.selectedMaterial.item)
     -- Auto-return to screen 1 after CONFIRM_DELAY seconds
     os.sleep(CONFIRM_DELAY)
     state.screen = 1
@@ -878,12 +934,12 @@ local function eventLoop()
             handlePedestalClick(event, eventData)
         end
 
-        os.sleep(0.05)
+        os.sleep(EVENT_LOOP_SLEEP)
     end
 end
 
 -- Main
-writeLog("Starting shop system...")
+writeLog("INFO", "Starting shop system...")
 local ok, err = pcall(function()
     validateAll()
     initPeripherals()
@@ -897,7 +953,7 @@ local ok, err = pcall(function()
 end)
 
 if not ok then
-    writeLog("Fatal error: " .. tostring(err))
+    writeLog("ERROR", "Fatal error: " .. tostring(err))
     -- Attempt to lock depositor on crash
     pcall(relayLock.setOutput, "bottom", true)
     error(err)

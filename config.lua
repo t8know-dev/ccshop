@@ -22,6 +22,13 @@ PEDESTALS = {
 IDLE_TIMEOUT   = 120      -- seconds before auto-reset
 CONFIRM_DELAY  = 5        -- seconds on thank-you screen
 
+-- Performance tuning
+EVENT_LOOP_SLEEP = 0.01   -- seconds between event loop iterations (was 0.05)
+AE2_CACHE_TTL    = 30     -- seconds before refreshing AE2 stock cache
+
+-- Log level control (DEBUG, INFO, WARN, ERROR)
+LOG_LEVEL = "INFO"
+
 -- Messages (all in English, easy to edit)
 MSG = {
   header           = "* SHOP *",
