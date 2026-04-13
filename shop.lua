@@ -608,7 +608,9 @@ end
 
 -- Event loop for pedestal clicks
 local function eventLoop()
+    writeLog("Event loop starting")
     while true do
+        writeLog("Event loop iteration start")
         -- Check idle timeout (screens 2 and 3)
         if (state.screen == 2) or (state.screen == 3 and state.subState) then
             if os.clock() - state.lastActivity > IDLE_TIMEOUT then
@@ -629,12 +631,9 @@ local function eventLoop()
             end
         end
 
-        local eventData = { os.pullEvent(0.2) }
+        local eventData = { os.pullEvent() }
         local event = eventData[1]
         writeLog("EVENT: " .. tostring(event) .. " (full eventData count: " .. #eventData .. ")")
-        if event ~= nil then
-            writeLog("Event details: [1]=" .. tostring(eventData[1]) .. " [2]=" .. tostring(eventData[2]) .. " [3]=" .. type(eventData[3]))
-        end
 
         -- Payment detection (screen 3 confirming sub-state)
         if state.screen == 3 and state.subState == "confirming" and not state.paymentPaid and not state.cancelRequested then
@@ -662,7 +661,7 @@ local function eventLoop()
         end
 
         -- Pedestal click events from display_pedestal peripheral
-        if event ~= nil and (string.find(event, "pedestal") and string.find(event, "click")) then
+        if event == "pedestal_left_click" or event == "pedestal_right_click" then
             writeLog("Pedestal event: " .. event .. " on " .. tostring(eventData[2]))
             writeLog("Event data[2] type: " .. type(eventData[2]))
             -- Log mapping tables for debugging
