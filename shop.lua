@@ -535,7 +535,7 @@ local function renderScreen3Confirming()
     writeLog("Price calculated: " .. price .. " spurs for quantity " .. state.selectedQty)
 
     -- Set depositor price
-    local ok, err = pcall(depositor.setPrice, price)
+    local ok, err = pcall(depositor.setTotalPrice, price)
     if not ok then
         hintLabel:setText(MSG.error_deposit)
         os.sleep(2)
