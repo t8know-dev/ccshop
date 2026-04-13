@@ -23,6 +23,9 @@ IDLE_TIMEOUT   = 120      -- seconds before auto-reset
 PAYMENT_TIMEOUT = 30      -- seconds to wait for payment after unlocking depositor
 CONFIRM_DELAY  = 5        -- seconds on thank-you screen
 
+-- Payment detection
+PAYMENT_DETECTION_SIDE = "bottom"  -- which side of the relay is connected to depositor payment signal
+
 -- Performance tuning
 EVENT_LOOP_SLEEP = 0.01   -- seconds between event loop iterations (was 0.05)
 AE2_CACHE_TTL    = 30     -- seconds before refreshing AE2 stock cache

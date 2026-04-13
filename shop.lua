@@ -125,6 +125,7 @@ local renderCurrentScreen
 
 -- Forward declarations for relay helper functions
 local getAllRelayInputs, debugRelayInputs
+local paymentMonitorThread  -- dedicated thread for payment detection
 
 -- Peripheral wrappers (initialized after validation)
 local relayLock, ae2Adapter, depositor, relayNote, monitor, pedestals
@@ -265,6 +266,7 @@ local function getAllRelayInputs()
         if ok then
             inputs[side] = val
         else
+            writeLog("WARN", "getInput failed for side " .. side .. ": " .. tostring(val))
             inputs[side] = nil
         end
     end
@@ -642,7 +644,8 @@ local function renderScreen3Confirming()
 
     -- Unlock depositor and establish baseline for payment detection
     pcall(relayLock.setOutput, "bottom", false)
-    os.sleep(0.3)
+    writeLog("INFO", "Depositor unlocked (bottom side set to false), waiting for stabilization...")
+    os.sleep(0.5)  -- Give depositor time to stabilize
     -- Get baseline for all sides
     local baselineTable = getAllRelayInputs()
     state.paymentBaseline = baselineTable
@@ -651,15 +654,12 @@ local function renderScreen3Confirming()
     state.cancelRequested = false
     state.paymentCheckCount = 0
 
-    -- Log baseline for top side (for compatibility)
-    local topBaseline = baselineTable["top"] or false
-    writeLog("INFO", "Depositor unlocked, baseline (top side): " .. tostring(topBaseline) .. ", deadline: " .. state.paymentDeadline)
-    debugRelayInputs()  -- Log all sides for debugging
-    if topBaseline then
-        writeLog("INFO", "Waiting for LOW signal (transition away from HIGH) for payment detection")
-    else
-        writeLog("INFO", "Waiting for HIGH signal (transition away from LOW) for payment detection")
+    -- Log baseline for all sides
+    writeLog("INFO", "Payment detection baseline established:")
+    for side, val in pairs(baselineTable) do
+        writeLog("INFO", "  " .. side .. " = " .. tostring(val))
     end
+    writeLog("INFO", "Payment deadline: " .. state.paymentDeadline .. " (current time: " .. os.clock() .. ")")
 end
 
 -- Screen 4: Thank you
@@ -970,57 +970,91 @@ local function checkPaymentDetection()
             renderCurrentScreen()
         else
             state.paymentCheckCount = state.paymentCheckCount + 1
-            if state.paymentCheckCount % 10 == 0 then
-                writeLog("DEBUG", "Payment detection check #" .. state.paymentCheckCount .. ", deadline in " .. (state.paymentDeadline - os.clock()) .. "s")
-            end
-            if state.paymentCheckCount % 20 == 0 then
-                debugRelayInputs()
+            -- Log first few checks and then periodically
+            if state.paymentCheckCount <= 10 or state.paymentCheckCount % 20 == 0 then
+                writeLog("DEBUG", "Payment detection check #" .. state.paymentCheckCount .. ", deadline in " .. string.format("%.1f", state.paymentDeadline - os.clock()) .. "s")
+                if state.paymentCheckCount <= 5 or state.paymentCheckCount % 30 == 0 then
+                    debugRelayInputs()
+                end
             end
             -- Check all relay sides for payment signal
             local currentInputs = getAllRelayInputs()
             local paymentDetected = false
             local changedSide = nil
-            for side, baselineVal in pairs(state.paymentBaseline) do
-                local currentVal = currentInputs[side]
-                if currentVal ~= nil and currentVal ~= baselineVal then
+            -- First, check the configured payment detection side specifically (most likely)
+            local paymentSide = PAYMENT_DETECTION_SIDE or "bottom"
+            if state.paymentBaseline[paymentSide] ~= nil and currentInputs[paymentSide] ~= nil then
+                if currentInputs[paymentSide] ~= state.paymentBaseline[paymentSide] then
                     paymentDetected = true
-                    changedSide = side
-                    break
+                    changedSide = paymentSide
+                end
+            end
+            -- If payment side didn't change, check all other sides (fallback)
+            if not paymentDetected then
+                for side, baselineVal in pairs(state.paymentBaseline) do
+                    if side ~= paymentSide then  -- already checked
+                        local currentVal = currentInputs[side]
+                        if currentVal ~= nil and currentVal ~= baselineVal then
+                            paymentDetected = true
+                            changedSide = side
+                            break
+                        end
+                    end
                 end
             end
             if paymentDetected then
-                writeLog("INFO", "Payment detected on side " .. tostring(changedSide) .. "! current=" .. tostring(currentInputs[changedSide]) .. " baseline=" .. tostring(state.paymentBaseline[changedSide]))
+                writeLog("INFO", "PAYMENT DETECTED on side " .. tostring(changedSide) .. "! current=" .. tostring(currentInputs[changedSide]) .. " baseline=" .. tostring(state.paymentBaseline[changedSide]))
+                writeLog("INFO", "All sides: " .. textutils.serialize(currentInputs))
                 pcall(relayLock.setOutput, 'bottom', true)  -- lock depositor
                 state.paymentPaid = true
                 state.screen = 4  -- Move to thank you screen
                 renderCurrentScreen()
             else
                 -- Log only occasionally to avoid spam
-                if state.paymentCheckCount % 30 == 0 then
+                if state.paymentCheckCount % 40 == 0 then
                     writeLog("DEBUG", "Payment detection check #" .. state.paymentCheckCount .. ", no change on any side")
                 end
             end
         end
     end
 end
+-- Payment monitor loop - runs continuously in parallel thread
+local function paymentMonitorLoop()
+    writeLog("INFO", "Payment monitor thread started")
+    while true do
+        local ok, err = pcall(function()
+            -- Check idle timeout
+            checkIdleTimeout()
+
+            -- Check payment detection
+            checkPaymentDetection()
+
+            os.sleep(0.02)  -- 20ms check interval - fast enough to catch short pulses
+        end)
+        if not ok then
+            writeLog("ERROR", "Payment monitor loop error: " .. tostring(err))
+            os.sleep(1)  -- avoid tight error loop
+        end
+    end
+end
+
 -- Event loop for pedestal clicks
 local function eventLoop()
+    writeLog("INFO", "Event loop thread started")
     while true do
-        -- Check idle timeout
-        checkIdleTimeout()
+        local ok, err = pcall(function()
+            local eventData = { os.pullEvent() }
+            local event = eventData[1]
 
-        -- Check payment detection
-        checkPaymentDetection()
-
-        local eventData = { os.pullEvent() }
-        local event = eventData[1]
-
-        -- Pedestal click events from display_pedestal peripheral
-        if event == "pedestal_left_click" or event == "pedestal_right_click" then
-            handlePedestalClick(event, eventData)
+            -- Pedestal click events from display_pedestal peripheral
+            if event == "pedestal_left_click" or event == "pedestal_right_click" then
+                handlePedestalClick(event, eventData)
+            end
+        end)
+        if not ok then
+            writeLog("ERROR", "Event loop error: " .. tostring(err))
+            os.sleep(1)  -- avoid tight error loop
         end
-
-        os.sleep(EVENT_LOOP_SLEEP)
     end
 end
 
@@ -1034,7 +1068,8 @@ local ok, err = pcall(function()
 
     parallel.waitForAny(
         function() basalt.run() end,
-        eventLoop
+        eventLoop,
+        paymentMonitorLoop
     )
 end)
 
