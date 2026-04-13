@@ -26,17 +26,17 @@ The system is split across multiple Lua files for modularity:
 
 ### Flow of Screens
 
-The shop operates as a five‑screen state machine:
+The shop operates as a four‑screen state machine with Screen 3 having two sub‑states:
 
-1. **Category selection** — Right‑click a pedestal showing a category icon (iron, certus quartz, redstone, dye). The pedestal list is centered across available pedestals.
+1. **Category selection** — Welcome screen. Pedestals show category icons (iron, certus quartz, redstone, dye). Right‑click selects a category. No cancel button. Idle timeout does not apply.
 
-2. **Material selection** — Shows only materials belonging to the chosen category that have sufficient stock in AE2. Right‑click selects a material, left‑click returns to category selection.
+2. **Material selection** — Shows only materials belonging to the chosen category that have sufficient stock in AE2. Right‑click selects a material, left‑click returns to category selection. Cancel button visible.
 
-3. **Quantity selection** — Displays available quantity tiers (from the material’s `minQty` up to stock). Right‑click chooses a quantity, left‑click goes back.
+3. **Quantity selection and payment** — Two sub‑states:
+   - **3A: Selecting a quantity** — Pedestals show available quantity tiers (from `minQty` up to AE2 stock). Right‑click chooses a quantity, left‑click returns to material selection. Cancel button visible.
+   - **3B: Awaiting payment** — Triggered immediately after quantity selection. Selected pedestal label changes to `"[<qty>]"`. Depositor is configured and unlocked. Monitor shows calculated price and insert instruction. Cancel button visible.
 
-4. **Payment** — Unlocks the Numismatics depositor, shows hint with required spurs, and waits for payment. The user can cancel with the UI cancel button.
-
-5. **Thank‑you screen** — Plays a noteblock sound, logs the purchase, and returns to screen 1 after `CONFIRM_DELAY` seconds.
+4. **Thank‑you screen** — Plays a noteblock sound, logs the purchase, mocks item dispensing, and auto‑returns to screen 1 after `CONFIRM_DELAY` seconds. No cancel button.
 
 ### Peripheral Integration
 
@@ -100,14 +100,21 @@ Helpers `quantityToNumber(qty)` and `findQuantityIndex(num)` convert between str
 ### State (`shop.lua`)
 ```lua
 local state = {
-    screen = 1,               -- 1=category, 2=materials, 3=quantity, 4=payment, 5=thankyou
+    screen = 1,               -- 1=category, 2=material, 3=quantity, 4=thankyou
+    subState = nil,           -- nil, "selecting", or "confirming" (screen 3 only)
     selectedCategory = nil,
     selectedMaterial = nil,
     selectedQty = nil,
+    calculatedPrice = nil,
     lastActivity = os.clock(),
-    currentOptions = {},      -- pedestal index -> option table (item, label, count)
+    currentOptions = {},      -- pedestal index → option table { item, label, qty/category/material }
     currentPedestalIndices = {}, -- which pedestal indices are currently used
     lastSelectedPedestal = nil, -- last selected pedestal index
+    cancelRequested = false,
+    availableQuantities = nil, -- list of numeric quantities available for selected material
+    paymentBaseline = nil,    -- baseline relay input state for payment detection
+    paymentDeadline = nil,    -- os.clock() deadline for payment timeout
+    paymentPaid = false,
 }
 ```
 
@@ -126,12 +133,55 @@ local state = {
 ### `config.lua`
 - Peripheral name constants (`RELAY_LOCK`, `AE2_ADAPTER`, `DEPOSITOR`, `RELAY_NOTE`, `MONITOR`, `PEDESTALS`).
 - Timing constants (`IDLE_TIMEOUT`, `CONFIRM_DELAY`).
-- UI message table (`MSG`).
+- UI message table (`MSG`) with required keys:
+  ```lua
+  MSG = {
+    header           = "* SHOP *",
+    screen1_hint     = "Right-click a pedestal to select a category",
+    screen2_hint     = "RMB: select   LMB: go back",
+    screen3_hint_select  = "RMB: select quantity   LMB: go back",
+    screen3_base_price   = "Base price: %d spurs for %s units",
+    screen3_price_calc   = "Price: %d spurs",
+    screen3_insert       = "Please insert %d spurs into the depositor",
+    screen4_thanks   = "Your items will be dispensed. Thank you!",
+    cancel_btn       = "[ CANCEL ]",
+    error_ae2        = "AE2 network unavailable",
+    error_deposit    = "Depositor unavailable",
+    error_relay      = "Relay unavailable",
+    timeout_msg      = "Session timed out. Returning to main screen.",
+  }
+  ```
 - `validatePeripherals()` – attempts to wrap each peripheral; called at startup.
 
 ### `items.lua`
 - `CATEGORIES`, `MATERIALS`, `QUANTITIES` tables.
-- Helper functions for quantity conversion and lookup.
+- Helper functions for quantity conversion and lookup (`quantityToNumber`, `findQuantityIndex`).
+- Required structure:
+  ```lua
+  -- Categories
+  CATEGORIES = {
+    { label = "Metals",   item = "minecraft:iron_ingot"          },
+    { label = "Crystals", item = "ae2:certus_quartz_crystal"     },
+    { label = "Redstone", item = "minecraft:redstone"            },
+    { label = "Dyes",     item = "minecraft:blue_dye"            },
+  }
+
+  -- Materials
+  MATERIALS = {
+    {
+      label     = "Iron Ingot",
+      item      = "minecraft:iron_ingot",
+      category  = "Metals",   -- must match a CATEGORIES label exactly
+      minQty    = 64,         -- first quantity option shown; must exist in QUANTITIES
+      basePrice = 10,         -- price in spurs for minQty units
+    },
+    -- add more...
+  }
+
+  -- Quantity tiers (ordered smallest → largest)
+  -- Allowed values: 1, 8, 32, 64, 256, 512, 1024, "4k", "16k", "32k"
+  QUANTITIES = { 1, 8, 32, 64, 256, 512, 1024, "4k", "16k", "32k" }
+  ```
 
 ### `db.lua`
 - `log(record)` – appends a purchase record in ndjson format.
@@ -151,6 +201,26 @@ else
     local ok, err = pcall(pedestals[idx].setItem, opt.item)
 end
 ```
+
+## Cancel button behaviour
+
+| Screen | Cancel button visible | Cancel action |
+|---|---|---|
+| 1 – Category | No | — |
+| 2 – Material | Yes | Return to Screen 1 |
+| 3A – Quantity selecting | Yes | Return to Screen 1 |
+| 3B – Awaiting payment | Yes | Lock depositor, return to Screen 1 |
+| 4 – Thank you | No | — |
+
+- Button position: top‑left corner of monitor.
+- Label: `"[ CANCEL ]"`.
+
+## Idle timeout behaviour
+
+- Applies to: Screens 2, 3A, 3B.
+- Duration: 120 s of no user interaction.
+- Action: if on 3B → lock depositor first; then return to Screen 1.
+- `state.lastActivity = os.clock()` is reset on every user interaction (pedestal click, cancel press).
 
 ## Event Handling
 
@@ -178,3 +248,59 @@ The script maps the pedestal object/name to an index using `pedestalObjectToInde
 - Logs include peripheral wrapping results, stock queries, event data, and state transitions.
 - The debug file is appended each run; clear it manually if it grows too large.
 - Purchase records are stored in `/ccshop/purchases.json` (ndjson format).
+
+
+## Workflow Orchestration
+
+### 1. Plan Mode Default
+- Enter plan mode for ANY non-trivial task (3+ steps or architectural decisions)
+- If something goes sideways, STOP and re-plan immediately — don't keep pushing
+- Use plan mode for verification steps, not just building
+- Write detailed specs upfront to reduce ambiguity
+
+### 2. Subagent Strategy
+- Use subagents liberally to keep main context window clean
+- Offload research, exploration, and parallel analysis to subagents
+- For complex problems, throw more compute at it via subagents
+- One task per subagent for focused execution
+
+### 3. Self-Improvement Loop
+- After ANY correction from the user: update `tasks/lessons.md` with the pattern
+- Write rules for yourself that prevent the same mistake
+- Ruthlessly iterate on these lessons until mistake rate drops
+- Review lessons at session start for relevant project
+
+### 4. Verification Before Done
+- Never mark a task complete without proving it works
+- Diff behavior between main and your changes when relevant
+- Ask yourself: "Would a staff engineer approve this?"
+- Run tests, check logs, demonstrate correctness
+
+### 5. Demand Elegance (Balanced)
+- For non-trivial changes: pause and ask "is there a more elegant way?"
+- If a fix feels hacky: "Knowing everything I know now, implement the elegant solution"
+- Skip this for simple, obvious fixes — don't over-engineer
+- Challenge your own work before presenting it
+
+### 6. Autonomous Bug Fixing
+- When given a bug report: just fix it. Don't ask for hand-holding
+- Point at logs, errors, failing tests — then resolve them
+- Zero context switching required from the user
+- Go fix failing CI tests without being told how
+
+## Task Management
+
+1. **Plan First**: Write plan to `tasks/todo.md` with checkable items
+2. **Verify Plan**: Check in before starting implementation
+3. **Track Progress**: Mark items complete as you go
+4. **Explain Changes**: High-level summary at each step
+5. **Document Results**: Add review section to `tasks/todo.md`
+6. **Capture Lessons**: Update `tasks/lessons.md` after corrections
+
+## Core Principles
+
+- **Simplicity First**: Make every change as simple as possible. Impact minimal code.
+- **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
+- **Minimal Impact**: Changes should only touch what's necessary. Avoid introducing bugs.
+
+

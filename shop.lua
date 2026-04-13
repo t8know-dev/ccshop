@@ -92,16 +92,22 @@ end
 
 -- Global state (as per spec)
 local state = {
-    screen = 1,               -- 1=category, 2=materials, 3=quantity, 4=payment, 5=thankyou
+    screen = 1,               -- 1=category, 2=materials, 3=quantity/payment, 4=thankyou
+    subState = nil,           -- nil, "selecting", or "confirming" (screen 3 only)
     selectedCategory = nil,
     selectedMaterial = nil,
     selectedQty = nil,
+    calculatedPrice = nil,    -- price for selected quantity
     lastActivity = os.clock(),
     currentOptions = {},      -- pedestal index -> option table (item, label, count)
     currentPedestalIndices = {}, -- which pedestal indices are currently used
     lastSelectedPedestal = nil, -- last selected pedestal index
+    cancelRequested = false,
+    availableQuantities = nil, -- list of numeric quantities available for selected material
+    paymentBaseline = nil,    -- baseline relay input state for payment detection
+    paymentDeadline = nil,    -- os.clock() deadline for payment timeout
+    paymentPaid = false,
 }
-local paymentCancelled = false
 
 -- Forward declaration for renderCurrentScreen (defined later)
 local renderCurrentScreen
@@ -343,14 +349,19 @@ local function createUI()
         :setForeground(colors.white)
         :onClick(function()
             playNoteblockSound()
-            if state.screen == 4 then
+            -- Lock depositor if on payment screen (screen 3 confirming)
+            if state.screen == 3 and state.subState == "confirming" then
                 pcall(relayLock.setOutput, "bottom", true)  -- lock depositor
-                paymentCancelled = true
+                state.cancelRequested = true
+                state.paymentPaid = false
             end
+            -- Reset to main screen
             state.screen = 1
             state.selectedCategory = nil
             state.selectedMaterial = nil
             state.selectedQty = nil
+            state.subState = nil
+            state.cancelRequested = false
             renderCurrentScreen()
         end)
     if cancelButton and cancelButton.setVisible then
@@ -369,13 +380,23 @@ local function updateUI()
         hintLabel:setText(MSG.screen2_hint)
         if cancelButton and cancelButton.setVisible then cancelButton:setVisible(true) end
     elseif state.screen == 3 then
-        hintLabel:setText(MSG.screen3_hint)
-        if cancelButton and cancelButton.setVisible then cancelButton:setVisible(true) end
+        if state.subState == "selecting" then
+            -- Show base price and hint
+            local basePriceStr = ""
+            if state.selectedMaterial then
+                basePriceStr = string.format(MSG.screen3_base_price, state.selectedMaterial.basePrice, state.selectedMaterial.minQty) .. " | "
+            end
+            hintLabel:setText(basePriceStr .. MSG.screen3_hint_select)
+            if cancelButton and cancelButton.setVisible then cancelButton:setVisible(true) end
+        elseif state.subState == "confirming" then
+            -- Show price and insert instruction
+            local hint = string.format(MSG.screen3_price_calc, state.calculatedPrice) .. " - " ..
+                        string.format(MSG.screen3_insert, state.calculatedPrice)
+            hintLabel:setText(hint)
+            if cancelButton and cancelButton.setVisible then cancelButton:setVisible(true) end
+        end
     elseif state.screen == 4 then
-        hintLabel:setText(string.format(MSG.screen4_insert, state.selectedQty) .. " " .. MSG.screen4_cancel)
-        if cancelButton and cancelButton.setVisible then cancelButton:setVisible(true) end
-    elseif state.screen == 5 then
-        hintLabel:setText(MSG.screen5_thanks)
+        hintLabel:setText(MSG.screen4_thanks)
         if cancelButton and cancelButton.setVisible then cancelButton:setVisible(false) end
     end
 end
@@ -425,9 +446,9 @@ local function renderScreen2()
     updateUI()
 end
 
--- Screen 3: Quantity selection
-local function renderScreen3()
-    writeLog("Rendering screen 3 (quantities) for material: " .. tostring(state.selectedMaterial.item))
+-- Screen 3: Quantity selection (selecting sub-state)
+local function renderScreen3Selecting()
+    writeLog("Rendering screen 3 (selecting) for material: " .. tostring(state.selectedMaterial.item))
     clearPedestals()
     local stock = getAE2Stock(state.selectedMaterial.item)
     writeLog("Stock: " .. stock .. " minQty: " .. state.selectedMaterial.minQty)
@@ -443,6 +464,7 @@ local function renderScreen3()
         end
     end
     writeLog("Available quantities: " .. #quantities)
+    state.availableQuantities = quantities
     if #quantities == 0 then
         -- No quantities available (stock less than minQty) – should not happen
         writeLog("No quantities available, returning to screen 2")
@@ -458,13 +480,61 @@ local function renderScreen3()
     updateUI()
 end
 
--- Screen 4: Payment
-local function renderScreen4()
-    clearPedestals()
-    updateUI()
-    -- The pedestals remain empty
-    -- Unlock depositor and set price
+-- Screen 3: Payment (confirming sub-state)
+local function renderScreen3Confirming()
+    writeLog("Rendering screen 3 (confirming) for material: " .. tostring(state.selectedMaterial.item) .. " qty: " .. tostring(state.selectedQty))
+
+    -- Ensure we have available quantities (should be set from screen 3)
+    if not state.availableQuantities then
+        writeLog("ERROR: availableQuantities not set, recomputing")
+        local stock = getAE2Stock(state.selectedMaterial.item)
+        local quantities = {}
+        local startIdx = findQuantityIndex(state.selectedMaterial.minQty)
+        if not startIdx then startIdx = 1 end
+        for i = startIdx, #QUANTITIES do
+            local qtyNum = quantityToNumber(QUANTITIES[i])
+            if qtyNum <= stock then
+                table.insert(quantities, qtyNum)
+            else break end
+        end
+        state.availableQuantities = quantities
+    end
+
+    -- Create options for all available quantities
+    local options = {}
+    for _, qtyNum in ipairs(state.availableQuantities) do
+        table.insert(options, {
+            item = state.selectedMaterial.item,
+            label = tostring(qtyNum),
+            count = qtyNum
+        })
+    end
+    setPedestalOptions(options)
+
+    -- Update pedestal labels: selected quantity gets brackets
+    for idx, opt in pairs(state.currentOptions) do
+        if opt.count and pedestals[idx] then
+            local label = tostring(opt.count)
+            if opt.count == state.selectedQty then
+                label = "[ " .. label .. " ]"
+                state.lastSelectedPedestal = idx
+            end
+            writeLog("Setting pedestal " .. idx .. " label: " .. label)
+            pcall(pedestals[idx].setItem, opt.item, label)
+            pcall(pedestals[idx].setItemRendered, true)
+            pcall(pedestals[idx].setLabelRendered, true)
+        end
+    end
+
+    -- Lock depositor first (in case we're changing quantity)
+    pcall(relayLock.setOutput, "bottom", true)
+
+    -- Calculate price
     local price = math.floor(state.selectedMaterial.basePrice * (state.selectedQty / state.selectedMaterial.minQty))
+    state.calculatedPrice = price
+    writeLog("Price calculated: " .. price .. " spurs for quantity " .. state.selectedQty)
+
+    -- Set depositor price
     local ok, err = pcall(depositor.setPrice, price)
     if not ok then
         hintLabel:setText(MSG.error_deposit)
@@ -473,39 +543,26 @@ local function renderScreen4()
         renderCurrentScreen()
         return
     end
-    -- Unlock relay (bottom output LOW)
+
+    -- Unlock depositor and establish baseline for payment detection
     pcall(relayLock.setOutput, "bottom", false)
     os.sleep(0.3)
     local baseline = false
     local ok, result = pcall(relayLock.getInput, "bottom")
     if ok then baseline = result end
-    local paid = false
-    local deadline = os.clock() + 300  -- 5 minute payment timeout
-    paymentCancelled = false
-    while os.clock() < deadline and not paid and not paymentCancelled do
-        -- Check for cancel request (handled by cancel button)
-        -- Check for payment detection
-        local ok, current = pcall(relayLock.getInput, "bottom")
-        if ok and current ~= baseline then
-            paid = true
-            break
-        end
-        os.sleep(0.05)
-    end
-    -- Lock depositor regardless
-    pcall(relayLock.setOutput, "bottom", true)
-    if paid then
-        state.screen = 5
-        renderCurrentScreen()
-    else
-        -- Payment cancelled or timed out
-        state.screen = 1
-        renderCurrentScreen()
-    end
+    state.paymentBaseline = baseline
+    state.paymentDeadline = os.clock() + IDLE_TIMEOUT
+    state.paymentPaid = false
+    state.cancelRequested = false
+
+    writeLog("Depositor unlocked, baseline: " .. tostring(baseline) .. ", deadline: " .. state.paymentDeadline)
+
+    -- Update UI (hint will be set by updateUI)
+    updateUI()
 end
 
--- Screen 5: Thank you
-local function renderScreen5()
+-- Screen 4: Thank you
+local function renderScreen4()
     clearPedestals()
     updateUI()
     -- Play noteblock sound
@@ -528,6 +585,10 @@ local function renderScreen5()
     state.selectedCategory = nil
     state.selectedMaterial = nil
     state.selectedQty = nil
+    state.subState = nil
+    state.calculatedPrice = nil
+    state.paymentPaid = false
+    state.cancelRequested = false
     renderCurrentScreen()
 end
 
@@ -536,34 +597,68 @@ renderCurrentScreen = function()
     state.lastActivity = os.clock()
     if state.screen == 1 then renderScreen1()
     elseif state.screen == 2 then renderScreen2()
-    elseif state.screen == 3 then renderScreen3()
-    elseif state.screen == 4 then renderScreen4()
-    elseif state.screen == 5 then renderScreen5()
+    elseif state.screen == 3 then
+        if state.subState == "selecting" then renderScreen3Selecting()
+        elseif state.subState == "confirming" then renderScreen3Confirming()
+        else renderScreen3Selecting() -- default to selecting
+        end
+    elseif state.screen == 4 then renderScreen4() -- formerly screen 5
     end
 end
 
 -- Event loop for pedestal clicks
 local function eventLoop()
     while true do
-        -- Check idle timeout (screens 2-4)
-        if state.screen >= 2 and state.screen <= 4 then
+        -- Check idle timeout (screens 2 and 3)
+        if (state.screen == 2) or (state.screen == 3 and state.subState) then
             if os.clock() - state.lastActivity > IDLE_TIMEOUT then
-                -- Timeout: lock depositor, reset to screen 1
-                pcall(relayLock.setOutput, "bottom", true)
+                -- Timeout: lock depositor if in confirming state, reset to screen 1
+                if state.screen == 3 and state.subState == "confirming" then
+                    pcall(relayLock.setOutput, "bottom", true)
+                end
                 state.screen = 1
+                -- Reset all state
                 state.selectedCategory = nil
                 state.selectedMaterial = nil
                 state.selectedQty = nil
+                state.subState = nil
+                state.paymentPaid = false
                 renderCurrentScreen()
                 hintLabel:setText(MSG.timeout_msg)
                 os.sleep(2)
             end
         end
 
-        local eventData = { os.pullEvent() }
+        local eventData = { os.pullEvent(0.05) }
         local event = eventData[1]
+
+        -- Payment detection (screen 3 confirming sub-state)
+        if state.screen == 3 and state.subState == "confirming" and not state.paymentPaid and not state.cancelRequested then
+            if os.clock() >= state.paymentDeadline then
+                writeLog("Payment timeout")
+                pcall(relayLock.setOutput, "bottom", true)  -- lock depositor
+                state.screen = 1
+                -- Reset state
+                state.selectedCategory = nil
+                state.selectedMaterial = nil
+                state.selectedQty = nil
+                state.subState = nil
+                state.paymentPaid = false
+                renderCurrentScreen()
+            else
+                local ok, current = pcall(relayLock.getInput, "bottom")
+                if ok and current ~= state.paymentBaseline then
+                    writeLog("Payment detected")
+                    pcall(relayLock.setOutput, "bottom", true)  -- lock depositor
+                    state.paymentPaid = true
+                    state.screen = 4  -- Move to thank you screen
+                    renderCurrentScreen()
+                end
+            end
+        end
+
         -- Pedestal click events from display_pedestal peripheral
-        if event == "pedestal_left_click" or event == "pedestal_right_click" then
+        if event ~= nil and (event == "pedestal_left_click" or event == "pedestal_right_click") then
             writeLog("Pedestal event: " .. event .. " on " .. tostring(eventData[2]))
             if type(eventData[3]) == "table" then
                 local info = "name=" .. tostring(eventData[3].name) .. " count=" .. tostring(eventData[3].count) .. " displayName=" .. tostring(eventData[3].displayName)
@@ -703,6 +798,7 @@ local function eventLoop()
                         writeLog("Selected material index: " .. matIdx .. " label: " .. materialsInCategory[matIdx].label)
                         state.selectedMaterial = materialsInCategory[matIdx]
                         state.screen = 3
+                        state.subState = "selecting"
                         renderCurrentScreen()
                     else
                         writeLog("No material found for itemId " .. tostring(itemId))
@@ -713,81 +809,40 @@ local function eventLoop()
                     renderCurrentScreen()
                 end
             elseif state.screen == 3 then
-                -- Quantity selection: right-click choose, left-click back
-                -- Handle pedestal selection (visual feedback)
-                local isAlreadySelected = displayName and tostring(displayName):find("%[") and tostring(displayName):find("%]")
-                writeLog("isAlreadySelected: " .. tostring(isAlreadySelected))
-
-                if side == "right" then
-                    if pedestalIndex and pedestalOption and not isAlreadySelected then
-                        -- First click on pedestal - select it visually
-                        -- Deselect previous pedestal
-                        if state.lastSelectedPedestal and state.lastSelectedPedestal ~= pedestalIndex then
-                            writeLog("Deselecting previous pedestal: " .. state.lastSelectedPedestal)
-                            setPedestalSelection(state.lastSelectedPedestal, false)
-                        end
-                        -- Select current pedestal
-                        writeLog("Selecting pedestal: " .. pedestalIndex)
-                        setPedestalSelection(pedestalIndex, true)
-                        state.lastSelectedPedestal = pedestalIndex
-                        -- Don't proceed to quantity selection yet - wait for second click
-                        writeLog("Pedestal selected visually, waiting for second click to confirm quantity")
-                    else
-                        -- Either second click on already selected pedestal, or pedestal info missing
-                        -- Proceed with quantity selection
-                        writeLog("Proceeding with quantity selection (second click or missing pedestal info)")
-                        -- Determine which quantity option
-                    local stock = getAE2Stock(state.selectedMaterial.item)
-                    writeLog("Stock for " .. state.selectedMaterial.item .. ": " .. stock)
-                    local quantities = {}
-                    local startIdx = findQuantityIndex(state.selectedMaterial.minQty)
-                    if not startIdx then startIdx = 1 end
-                    writeLog("minQty: " .. state.selectedMaterial.minQty .. ", startIdx: " .. startIdx)
-                    for i = startIdx, #QUANTITIES do
-                        local qtyNum = quantityToNumber(QUANTITIES[i])
-                        if qtyNum <= stock then
-                            table.insert(quantities, qtyNum)
-                        else break end
-                    end
-                    writeLog("Generated quantities: " .. table.concat(quantities, ", "))
-                    writeLog("selectedCount: " .. tostring(selectedCount))
-                    local qtyIdx = nil
-                    -- Try to find quantity by selected count (from pedestal option or event)
-                    if selectedCount then
-                        for i, qty in ipairs(quantities) do
-                            if qty == selectedCount then
-                                qtyIdx = i
-                                break
-                            end
-                        end
-                        if qtyIdx then
-                            writeLog("Found quantity by count: " .. tostring(selectedCount) .. " index: " .. qtyIdx)
-                        end
-                    end
-                    if qtyIdx then
-                        writeLog("Selected quantity index: " .. qtyIdx .. " value: " .. quantities[qtyIdx])
-                        state.selectedQty = quantities[qtyIdx]
-                        state.screen = 4
-                        renderCurrentScreen()
-                    else
-                        writeLog("No quantity found for selectedCount " .. tostring(selectedCount))
-                        -- Fallback: select first available quantity if any
-                        if #quantities > 0 then
-                            qtyIdx = 1
-                            writeLog("Fallback: selecting first quantity index: " .. qtyIdx .. " value: " .. quantities[qtyIdx])
-                            state.selectedQty = quantities[qtyIdx]
-                            state.screen = 4
+                -- Screen 3: Quantity selection/payment
+                if state.subState == "selecting" then
+                    -- Quantity selecting sub-state
+                    if side == "right" then
+                        -- Single RMB click selects quantity and moves to confirming
+                        if selectedCount then
+                            state.selectedQty = selectedCount
+                            state.subState = "confirming"
                             renderCurrentScreen()
-                        else
-                            writeLog("No quantities available (stock insufficient)")
-                            -- Stay on screen 3, maybe show error message
                         end
+                    elseif side == "left" then
+                        -- LMB goes back to material selection
+                        state.screen = 2
+                        state.subState = nil
+                        renderCurrentScreen()
+                    end
+                elseif state.subState == "confirming" then
+                    -- Payment awaiting sub-state
+                    if side == "right" then
+                        -- RMB changes quantity (back to selecting)
+                        if selectedCount and selectedCount ~= state.selectedQty then
+                            state.selectedQty = selectedCount
+                            renderCurrentScreen()
+                        end
+                    elseif side == "left" then
+                        -- LMB goes back to quantity selection, lock depositor
+                        pcall(relayLock.setOutput, "bottom", true)
+                        state.subState = "selecting"
+                        renderCurrentScreen()
                     end
                 end
-                elseif side == "left" then
-                    state.screen = 2
-                    renderCurrentScreen()
-                end
+            elseif state.screen == 4 then
+                -- Thank you screen: ignore pedestal clicks (auto-returns to screen 1)
+                writeLog("Click on thank you screen ignored")
             end
         end
 

@@ -24,18 +24,19 @@ CONFIRM_DELAY  = 5        -- seconds on thank-you screen
 
 -- Messages (all in English, easy to edit)
 MSG = {
-  header         = "* SHOP *",
-  screen1_hint   = "Right-click a pedestal to select a category",
-  screen2_hint   = "RMB: select   LMB: back",
-  screen3_hint   = "RMB: choose quantity   LMB: back",
-  screen4_insert = "Please insert %d spurs into the depositor",
-  screen4_cancel = "Press CANCEL to abort",
-  screen5_thanks = "Your items will be dispensed. Thank you!",
-  cancel_btn     = "[ CANCEL ]",
-  error_ae2      = "AE2 network unavailable",
-  error_deposit  = "Depositor unavailable",
-  error_relay    = "Relay unavailable",
-  timeout_msg    = "Session timed out. Returning to main screen.",
+  header           = "* SHOP *",
+  screen1_hint     = "Right-click a pedestal to select a category",
+  screen2_hint     = "RMB: select   LMB: go back",
+  screen3_hint_select  = "RMB: select quantity   LMB: go back",
+  screen3_base_price   = "Base price: %d spurs for %s units",
+  screen3_price_calc   = "Price: %d spurs",
+  screen3_insert       = "Please insert %d spurs into the depositor",
+  screen4_thanks   = "Your items will be dispensed. Thank you!",
+  cancel_btn       = "[ CANCEL ]",
+  error_ae2        = "AE2 network unavailable",
+  error_deposit    = "Depositor unavailable",
+  error_relay      = "Relay unavailable",
+  timeout_msg      = "Session timed out. Returning to main screen.",
 }
 
 -- Validation function: attempt to wrap each peripheral
