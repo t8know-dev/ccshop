@@ -252,6 +252,39 @@ local function playNoteblockSound()
     pcall(relayNote.setOutput, "front", false)
 end
 
+-- Get all relay input sides as table side->value
+local function getAllRelayInputs()
+    if not relayLock then
+        writeLog("ERROR", "relayLock is nil in getAllRelayInputs")
+        return {}
+    end
+    local sides = {"bottom", "top", "front", "back", "left", "right"}
+    local inputs = {}
+    for _, side in ipairs(sides) do
+        local ok, val = pcall(relayLock.getInput, side)
+        if ok then
+            inputs[side] = val
+        else
+            inputs[side] = nil
+        end
+    end
+    return inputs
+end
+
+-- Debug: log all relay input sides
+local function debugRelayInputs()
+    local inputs = getAllRelayInputs()
+    local results = {}
+    for side, val in pairs(inputs) do
+        if val ~= nil then
+            table.insert(results, side .. "=" .. tostring(val))
+        else
+            table.insert(results, side .. "=error")
+        end
+    end
+    writeLog("DEBUG", "Relay inputs: " .. table.concat(results, ", "))
+end
+
 -- Helper: set pedestal label with selection brackets
 local function setPedestalSelection(pedestalIdx, selected)
     writeLog("DEBUG", "setPedestalSelection: idx=" .. pedestalIdx .. ", selected=" .. tostring(selected))
@@ -918,37 +951,6 @@ local function checkIdleTimeout()
 end
 
 -- Get all relay input sides as table side->value
-local function getAllRelayInputs()
-    if not relayLock then
-        writeLog("ERROR", "relayLock is nil in getAllRelayInputs")
-        return {}
-    end
-    local sides = {"bottom", "top", "front", "back", "left", "right"}
-    local inputs = {}
-    for _, side in ipairs(sides) do
-        local ok, val = pcall(relayLock.getInput, side)
-        if ok then
-            inputs[side] = val
-        else
-            inputs[side] = nil
-        end
-    end
-    return inputs
-end
-
--- Debug: log all relay input sides
-local function debugRelayInputs()
-    local inputs = getAllRelayInputs()
-    local results = {}
-    for side, val in pairs(inputs) do
-        if val ~= nil then
-            table.insert(results, side .. "=" .. tostring(val))
-        else
-            table.insert(results, side .. "=error")
-        end
-    end
-    writeLog("DEBUG", "Relay inputs: " .. table.concat(results, ", "))
-end
 
 -- Check payment detection
 local function checkPaymentDetection()
