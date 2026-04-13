@@ -117,6 +117,7 @@ local state = {
     paymentBaseline = nil,    -- baseline relay input state for payment detection
     paymentDeadline = nil,    -- os.clock() deadline for payment timeout
     paymentPaid = false,
+    paymentCheckCount = 0,    -- counter for payment detection checks
 }
 
 -- Forward declaration for renderCurrentScreen (defined later)
@@ -416,6 +417,7 @@ local function createUI()
             state.selectedQty = nil
             state.subState = nil
             state.cancelRequested = false
+            state.paymentCheckCount = 0
             renderCurrentScreen()
         end)
     if cancelButton and cancelButton.setVisible then
@@ -606,13 +608,20 @@ local function renderScreen3Confirming()
     os.sleep(0.3)
     local baseline = false
     local ok, result = pcall(relayLock.getInput, "bottom")
+    writeLog("DEBUG", "Baseline check: ok=" .. tostring(ok) .. ", result=" .. tostring(result))
     if ok then baseline = result end
     state.paymentBaseline = baseline
-    state.paymentDeadline = os.clock() + IDLE_TIMEOUT
+    state.paymentDeadline = os.clock() + PAYMENT_TIMEOUT
     state.paymentPaid = false
     state.cancelRequested = false
+    state.paymentCheckCount = 0
 
     writeLog("INFO", "Depositor unlocked, baseline: " .. tostring(baseline) .. ", deadline: " .. state.paymentDeadline)
+    if baseline then
+        writeLog("INFO", "Waiting for LOW signal (transition away from HIGH) for payment detection")
+    else
+        writeLog("INFO", "Waiting for HIGH signal (transition away from LOW) for payment detection")
+    end
 end
 
 -- Screen 4: Thank you
@@ -645,6 +654,7 @@ local function renderScreen4()
     state.calculatedPrice = nil
     state.paymentPaid = false
     state.cancelRequested = false
+    state.paymentCheckCount = 0
     renderCurrentScreen()
 end
 
@@ -886,6 +896,7 @@ local function checkIdleTimeout()
             state.selectedQty = nil
             state.subState = nil
             state.paymentPaid = false
+            state.paymentCheckCount = 0
             renderCurrentScreen()
             hintLabel:setText(MSG.timeout_msg)
             os.sleep(2)
@@ -897,6 +908,7 @@ end
 local function checkPaymentDetection()
     if state.screen == 3 and state.subState == 'confirming' and not state.paymentPaid and not state.cancelRequested then
         if os.clock() >= state.paymentDeadline then
+            writeLog("INFO", "Payment timeout reached, locking depositor and returning to main screen")
             pcall(relayLock.setOutput, 'bottom', true)  -- lock depositor
             state.screen = 1
             -- Reset state
@@ -905,10 +917,17 @@ local function checkPaymentDetection()
             state.selectedQty = nil
             state.subState = nil
             state.paymentPaid = false
+            state.paymentCheckCount = 0
             renderCurrentScreen()
         else
+            state.paymentCheckCount = state.paymentCheckCount + 1
+            if state.paymentCheckCount % 10 == 0 then
+                writeLog("DEBUG", "Payment detection check #" .. state.paymentCheckCount .. ", deadline in " .. (state.paymentDeadline - os.clock()) .. "s")
+            end
             local ok, current = pcall(relayLock.getInput, 'bottom')
+            writeLog("DEBUG", "Payment detection: ok=" .. tostring(ok) .. ", current=" .. tostring(current) .. ", baseline=" .. tostring(state.paymentBaseline))
             if ok and current ~= state.paymentBaseline then
+                writeLog("INFO", "Payment detected! current=" .. tostring(current) .. " baseline=" .. tostring(state.paymentBaseline))
                 pcall(relayLock.setOutput, 'bottom', true)  -- lock depositor
                 state.paymentPaid = true
                 state.screen = 4  -- Move to thank you screen
