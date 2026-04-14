@@ -34,6 +34,8 @@ config.loadConfig()
 
 -- Initialize peripherals (depends on logging, config)
 peripherals.init(logging, config)
+-- Wrap peripherals and create mappings
+peripherals.initPeripherals()
 
 -- Initialize state (no dependencies)
 -- Already ready.
@@ -44,8 +46,8 @@ pedestal.init(logging, peripherals, config, state)
 -- Initialize UI (depends on peripherals, logging, config, state)
 ui.init(logging, peripherals, config, state)
 
--- Initialize screens (depends on pedestal, ui, peripherals, config, state)
-screens.init(logging, pedestal, ui, peripherals, config, state)
+-- Initialize screens (depends on pedestal, ui, peripherals, config, state, db)
+screens.init(logging, pedestal, ui, peripherals, config, state, db)
 
 -- Initialize events (depends on state, screens, pedestal, peripherals, logging, config)
 events.init(logging, state, screens, pedestal, peripherals, config)
@@ -69,9 +71,6 @@ logging.writeLog("INFO", "Starting modular shop system...")
 local ok, err = pcall(function()
     -- Validate configuration
     config.validateAll()
-
-    -- Initialize peripherals (wrap, create mappings)
-    peripherals.initPeripherals()
 
     -- Create Basalt UI
     ui.createUI()

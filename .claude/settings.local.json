@@ -3,7 +3,8 @@
     "allow": [
       "WebSearch",
       "Bash(lua -p shop.lua)",
-      "Bash(luac:*)"
+      "Bash(luac:*)",
+      "Bash(lua -l shop.lua)"
     ]
   }
 }

@@ -12,11 +12,19 @@ local function init(loggingModule, peripheralsModule, configModule, stateModule)
     config = configModule
     state = stateModule
     pedestals = peripherals.getPedestals()
+    if not pedestals then
+        logging.writeLog("WARN", "pedestals is nil from peripherals.getPedestals(), using empty table")
+        pedestals = {}
+    end
 end
 
 -- Set pedestal label with selection brackets
 local function setPedestalSelection(pedestalIdx, selected)
     logging.writeLog("DEBUG", "setPedestalSelection: idx=" .. pedestalIdx .. ", selected=" .. tostring(selected))
+    if not pedestals then
+        logging.writeLog("DEBUG", "  pedestals not initialized")
+        return
+    end
     local opt = state.getState("currentOptions")[pedestalIdx]
     if not opt or not pedestals[pedestalIdx] then
         logging.writeLog("DEBUG", "  No option or pedestal for index " .. pedestalIdx)
@@ -37,6 +45,7 @@ end
 
 -- Helper: update a single pedestal with item and optional label
 local function updateSinglePedestal(idx, opt)
+    if not pedestals then return end
     if not pedestals[idx] then return end
     local label = opt.count and tostring(opt.count) or opt.label
     if opt.item then
@@ -62,6 +71,7 @@ end
 
 -- Helper: clear a single pedestal
 local function clearSinglePedestal(idx)
+    if not pedestals then return end
     if not pedestals[idx] then return end
     pcall(pedestals[idx].setItem, nil)
     local ok1, err1 = pcall(pedestals[idx].setItemRendered, false)
@@ -210,6 +220,10 @@ end
 -- Helper: clear pedestals (remove items and labels)
 local function clearPedestals()
     logging.writeLog("DEBUG", "clearPedestals called")
+    if not pedestals then
+        logging.writeLog("WARN", "pedestals not initialized, skipping clear")
+        return
+    end
     -- Clear state tracking
     state.updateState({
         currentOptions = {},
@@ -242,6 +256,10 @@ end
 local function setPedestalOptions(options)
     -- options: array of {item=, label=, count=}
     logging.writeLog("INFO", "setPedestalOptions called with " .. #options .. " options")
+    if not pedestals then
+        logging.writeLog("WARN", "pedestals not initialized, skipping setPedestalOptions")
+        return
+    end
     for i, opt in ipairs(options) do
         logging.writeLog("DEBUG", "  option " .. i .. ": item=" .. tostring(opt.item) .. " label=" .. tostring(opt.label) .. " count=" .. tostring(opt.count))
     end

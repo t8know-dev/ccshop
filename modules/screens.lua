@@ -2,16 +2,17 @@
 -- Exports: init(), renderScreen1(), renderScreen2(), renderScreen3Selecting(),
 --          renderScreen3Confirming(), renderScreen4(), renderCurrentScreen()
 
-local logging, pedestal, ui, peripherals, config, state
+local logging, pedestal, ui, peripherals, config, state, db
 
 -- Initialize module with dependencies
-local function init(loggingModule, pedestalModule, uiModule, peripheralsModule, configModule, stateModule)
+local function init(loggingModule, pedestalModule, uiModule, peripheralsModule, configModule, stateModule, dbModule)
     logging = loggingModule
     pedestal = pedestalModule
     ui = uiModule
     peripherals = peripheralsModule
     config = configModule
     state = stateModule
+    db = dbModule
 end
 
 -- Screen 1: Category selection
@@ -186,7 +187,7 @@ local function renderScreen3Confirming()
 
     -- Update pedestal labels: selected quantity gets brackets
     local currentOptions = state.getState("currentOptions")
-    local pedestals = peripherals.getPedestals()
+    local pedestals = peripherals.getPedestals() or {}
     for idx, opt in pairs(currentOptions) do
         if opt.count and pedestals[idx] then
             local label = tostring(opt.count)

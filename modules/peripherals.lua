@@ -183,7 +183,7 @@ local function unlockDepositor()
 end
 
 -- Getters for internal state (for other modules)
-local function getPedestals() return pedestals end
+local function getPedestals() return pedestals or {} end
 local function getPedestalIndexByName() return pedestalIndexByName end
 local function getPedestalObjectToIndex() return pedestalObjectToIndex end
 local function getRelayLock() return relayLock end
