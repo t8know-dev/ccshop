@@ -19,10 +19,22 @@ The program runs until terminated with Ctrl+T (in-game). Ensure all required per
 
 The system is split across multiple Lua files for modularity:
 
-- **shop.lua** — Main script orchestrates UI, event handling, and business logic.
+- **shop.lua** — Main orchestrator that loads modules and runs the main loops.
 - **config.lua** — Peripheral names, messages, timeouts, pedestal list, and validation function.
 - **items.lua** — Categories, materials, quantity tiers, price definitions, and helper functions.
 - **db.lua** — Purchase logging (ndjson format) to `/ccshop/purchases.json`.
+- **modules/** — Modular components with single responsibilities:
+  - **logging.lua** — Logging utilities with log level control.
+  - **config.lua** — Enhanced configuration loading and validation.
+  - **peripherals.lua** — Peripheral management, AE2 cache, relay helpers.
+  - **state.lua** — Centralized state management with observer pattern.
+  - **pedestal.lua** — Pedestal rendering and management.
+  - **ui.lua** — Basalt UI creation and updates.
+  - **screens.lua** — Screen rendering logic.
+  - **events.lua** — Event handling and state transitions.
+  - **payment.lua** — Payment detection and idle timeout monitoring.
+
+The modules use dependency injection to avoid circular dependencies and enable testing.
 
 ### Flow of Screens
 
@@ -48,9 +60,10 @@ The shop operates as a four‑screen state machine with Screen 3 having two su
 
 ### Concurrency
 
-The main loop runs two coroutines in parallel:
-- `basalt.autoUpdate` — UI render loop.
-- `eventLoop` — Listens for pedestal click events and handles idle timeouts.
+The main orchestrator runs three coroutines in parallel using `parallel.waitForAny`:
+- `basalt.run()` — Basalt UI main loop.
+- `events.eventLoop` — Listens for pedestal click events and handles state transitions.
+- `payment.paymentMonitorLoop` — Monitors payment detection and idle timeouts.
 
 ## Key Data Structures
 
@@ -97,7 +110,9 @@ QUANTITIES = { 1, 8, 32, 64, 256, 512, 1024, "4k", "16k", "32k" }
 ```
 Helpers `quantityToNumber(qty)` and `findQuantityIndex(num)` convert between string/numeric representations.
 
-### State (`shop.lua`)
+### State (`modules/state.lua`)
+The state is managed by the `state.lua` module, which provides controlled access via `state.getState()` and `state.updateState(changes)` functions. The state structure remains:
+
 ```lua
 local state = {
     screen = 1,               -- 1=category, 2=material, 3=quantity, 4=thankyou
