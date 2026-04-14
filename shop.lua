@@ -307,6 +307,40 @@ local function setPedestalSelection(pedestalIdx, selected)
         writeLog("WARN", "  setItem with label failed: " .. tostring(err))
     end
 end
+-- Helper: update a single pedestal with item and optional label
+local function updateSinglePedestal(idx, opt)
+    if not pedestals[idx] then return end
+    local label = opt.count and tostring(opt.count) or opt.label
+    if opt.item then
+        if label then
+            local ok, err = pcall(pedestals[idx].setItem, opt.item, label)
+            if not ok then writeLog("WARN", "Pedestal " .. idx .. " setItem with label failed: " .. tostring(err)) end
+        else
+            local ok, err = pcall(pedestals[idx].setItem, opt.item)
+            if not ok then writeLog("WARN", "Pedestal " .. idx .. " setItem failed: " .. tostring(err)) end
+        end
+        pcall(pedestals[idx].setItemRendered, true)
+        if label then
+            pcall(pedestals[idx].setLabelRendered, true)
+        else
+            pcall(pedestals[idx].setLabelRendered, false)
+        end
+    else
+        pcall(pedestals[idx].setItem, nil)
+        pcall(pedestals[idx].setItemRendered, false)
+        pcall(pedestals[idx].setLabelRendered, false)
+    end
+end
+
+-- Helper: clear a single pedestal
+local function clearSinglePedestal(idx)
+    if not pedestals[idx] then return end
+    pcall(pedestals[idx].setItem, nil)
+    local ok1, err1 = pcall(pedestals[idx].setItemRendered, false)
+    local ok2, err2 = pcall(pedestals[idx].setLabelRendered, false)
+    if not ok1 then writeLog("WARN", "Pedestal " .. idx .. " setItemRendered failed: " .. tostring(err1)) end
+    if not ok2 then writeLog("WARN", "Pedestal " .. idx .. " setLabelRendered failed: " .. tostring(err2)) end
+end
 
 -- Helper: clear pedestals (remove items and labels)
 local function clearPedestals()
@@ -376,41 +410,6 @@ local function setPedestalOptions(options)
     writeLog("DEBUG", "Current pedestal indices: " .. table.concat(indices, ","))
     -- Update pedestals in parallel
     setPedestalOptionsParallel(options)
-end
-
--- Helper: update a single pedestal with item and optional label
-local function updateSinglePedestal(idx, opt)
-    if not pedestals[idx] then return end
-    local label = opt.count and tostring(opt.count) or opt.label
-    if opt.item then
-        if label then
-            local ok, err = pcall(pedestals[idx].setItem, opt.item, label)
-            if not ok then writeLog("WARN", "Pedestal " .. idx .. " setItem with label failed: " .. tostring(err)) end
-        else
-            local ok, err = pcall(pedestals[idx].setItem, opt.item)
-            if not ok then writeLog("WARN", "Pedestal " .. idx .. " setItem failed: " .. tostring(err)) end
-        end
-        pcall(pedestals[idx].setItemRendered, true)
-        if label then
-            pcall(pedestals[idx].setLabelRendered, true)
-        else
-            pcall(pedestals[idx].setLabelRendered, false)
-        end
-    else
-        pcall(pedestals[idx].setItem, nil)
-        pcall(pedestals[idx].setItemRendered, false)
-        pcall(pedestals[idx].setLabelRendered, false)
-    end
-end
-
--- Helper: clear a single pedestal
-local function clearSinglePedestal(idx)
-    if not pedestals[idx] then return end
-    pcall(pedestals[idx].setItem, nil)
-    local ok1, err1 = pcall(pedestals[idx].setItemRendered, false)
-    local ok2, err2 = pcall(pedestals[idx].setLabelRendered, false)
-    if not ok1 then writeLog("WARN", "Pedestal " .. idx .. " setItemRendered failed: " .. tostring(err1)) end
-    if not ok2 then writeLog("WARN", "Pedestal " .. idx .. " setLabelRendered failed: " .. tostring(err2)) end
 end
 
 -- Sequential pedestal update (fallback when parallel rendering is disabled)
