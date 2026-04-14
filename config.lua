@@ -33,6 +33,9 @@ AE2_CACHE_TTL    = 30     -- seconds before refreshing AE2 stock cache
 -- Log level control (DEBUG, INFO, WARN, ERROR)
 LOG_LEVEL = "DEBUG"
 
+-- Parallel rendering (true to enable parallel pedestal and UI updates)
+PARALLEL_RENDERING = true
+
 -- Messages (all in English, easy to edit)
 MSG = {
   header           = "* SHOP *",

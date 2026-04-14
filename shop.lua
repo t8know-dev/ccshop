@@ -315,14 +315,21 @@ local function clearPedestals()
     state.currentOptions = {}
     state.currentPedestalIndices = {}
     state.lastSelectedPedestal = nil
+    -- Create clear tasks for all pedestals
+    local clearTasks = {}
     for i = 1, #PEDESTALS do
         if pedestals[i] then
             writeLog("DEBUG", "Clearing pedestal " .. i)
-            pcall(pedestals[i].setItem, nil)
-            local ok1, err1 = pcall(pedestals[i].setItemRendered, false)
-            local ok2, err2 = pcall(pedestals[i].setLabelRendered, false)
-            if not ok1 then writeLog("WARN", "  setItemRendered failed: " .. tostring(err1)) end
-            if not ok2 then writeLog("WARN", "  setLabelRendered failed: " .. tostring(err2)) end
+            table.insert(clearTasks, function() clearSinglePedestal(i) end)
+        end
+    end
+
+    -- Execute in parallel with fallback
+    if #clearTasks > 0 then
+        local ok, err = pcall(parallel.waitForAll, table.unpack(clearTasks))
+        if not ok then
+            writeLog("WARN", "Parallel clear failed: " .. tostring(err) .. ", falling back to sequential")
+            for _, task in ipairs(clearTasks) do task() end
         end
     end
 end
@@ -364,6 +371,48 @@ local function setPedestalOptions(options)
         end
     end
     writeLog("DEBUG", "Current pedestal indices: " .. table.concat(indices, ","))
+    -- Update pedestals in parallel
+    setPedestalOptionsParallel(options)
+end
+
+-- Helper: update a single pedestal with item and optional label
+local function updateSinglePedestal(idx, opt)
+    if not pedestals[idx] then return end
+    local label = opt.count and tostring(opt.count) or opt.label
+    if opt.item then
+        if label then
+            local ok, err = pcall(pedestals[idx].setItem, opt.item, label)
+            if not ok then writeLog("WARN", "Pedestal " .. idx .. " setItem with label failed: " .. tostring(err)) end
+        else
+            local ok, err = pcall(pedestals[idx].setItem, opt.item)
+            if not ok then writeLog("WARN", "Pedestal " .. idx .. " setItem failed: " .. tostring(err)) end
+        end
+        pcall(pedestals[idx].setItemRendered, true)
+        if label then
+            pcall(pedestals[idx].setLabelRendered, true)
+        else
+            pcall(pedestals[idx].setLabelRendered, false)
+        end
+    else
+        pcall(pedestals[idx].setItem, nil)
+        pcall(pedestals[idx].setItemRendered, false)
+        pcall(pedestals[idx].setLabelRendered, false)
+    end
+end
+
+-- Helper: clear a single pedestal
+local function clearSinglePedestal(idx)
+    if not pedestals[idx] then return end
+    pcall(pedestals[idx].setItem, nil)
+    local ok1, err1 = pcall(pedestals[idx].setItemRendered, false)
+    local ok2, err2 = pcall(pedestals[idx].setLabelRendered, false)
+    if not ok1 then writeLog("WARN", "Pedestal " .. idx .. " setItemRendered failed: " .. tostring(err1)) end
+    if not ok2 then writeLog("WARN", "Pedestal " .. idx .. " setLabelRendered failed: " .. tostring(err2)) end
+end
+
+-- Sequential pedestal update (fallback when parallel rendering is disabled)
+local function sequentialPedestalUpdate(options)
+    local indices = centerPedestalIndices(#options)
     -- Update used pedestals
     for i, idx in ipairs(indices) do
         local opt = options[i]
@@ -414,6 +463,62 @@ local function setPedestalOptions(options)
             local ok2, err2 = pcall(pedestals[i].setLabelRendered, false)
             if not ok1 then writeLog("WARN", "  setItemRendered(false) failed: " .. tostring(err1)) end
             if not ok2 then writeLog("WARN", "  setLabelRendered(false) failed: " .. tostring(err2)) end
+        end
+    end
+end
+
+-- Parallel version of setPedestalOptions
+local function setPedestalOptionsParallel(options)
+    -- If parallel rendering disabled, fallback to sequential
+    if PARALLEL_RENDERING == false then
+        sequentialPedestalUpdate(options)
+        return
+    end
+    -- Same state tracking as original (lines 351-366)
+    local indices = centerPedestalIndices(#options)
+    state.currentOptions = {}
+    state.currentPedestalIndices = {}
+    for i, idx in ipairs(indices) do
+        state.currentPedestalIndices[idx] = true
+        if options[i] then
+            state.currentOptions[idx] = {
+                item = options[i].item,
+                label = options[i].label,
+                count = options[i].count
+            }
+        end
+    end
+
+    -- Create tasks for used pedestals
+    local updateTasks = {}
+    for i, idx in ipairs(indices) do
+        local opt = options[i]
+        if opt then
+            table.insert(updateTasks, function() updateSinglePedestal(idx, opt) end)
+        end
+    end
+
+    -- Create tasks for unused pedestals
+    local clearTasks = {}
+    local usedLookup = {}
+    for _, idx in ipairs(indices) do usedLookup[idx] = true end
+    for i = 1, #PEDESTALS do
+        if not usedLookup[i] and pedestals[i] then
+            table.insert(clearTasks, function() clearSinglePedestal(i) end)
+        end
+    end
+
+    -- Execute all tasks in parallel
+    local allTasks = {}
+    for _, task in ipairs(updateTasks) do table.insert(allTasks, task) end
+    for _, task in ipairs(clearTasks) do table.insert(allTasks, task) end
+
+    if #allTasks > 0 then
+        local ok, err = pcall(parallel.waitForAll, table.unpack(allTasks))
+        if not ok then
+            writeLog("WARN", "Parallel pedestal update failed: " .. tostring(err) .. ", falling back to sequential")
+            -- Fallback to sequential execution
+            for _, task in ipairs(allTasks) do task() end
         end
     end
 end
@@ -504,8 +609,16 @@ local function renderScreen1()
     for _, cat in ipairs(CATEGORIES) do
         table.insert(options, { item = cat.item, label = cat.label })
     end
-    updateUI()
-    setPedestalOptions(options)
+    -- Update UI and pedestals in parallel
+    local ok, err = pcall(parallel.waitForAll,
+        function() updateUI() end,
+        function() setPedestalOptions(options) end
+    )
+    if not ok then
+        writeLog("WARN", "Parallel render failed: " .. tostring(err) .. ", falling back to sequential")
+        updateUI()
+        setPedestalOptions(options)
+    end
 end
 
 -- Screen 2: Material selection (filtered by category and stock)
@@ -537,8 +650,16 @@ local function renderScreen2()
         renderCurrentScreen()
         return
     end
-    updateUI()
-    setPedestalOptions(options)
+    -- Update UI and pedestals in parallel
+    local ok, err = pcall(parallel.waitForAll,
+        function() updateUI() end,
+        function() setPedestalOptions(options) end
+    )
+    if not ok then
+        writeLog("WARN", "Parallel render failed: " .. tostring(err) .. ", falling back to sequential")
+        updateUI()
+        setPedestalOptions(options)
+    end
 end
 
 -- Screen 3: Quantity selection (selecting sub-state)
@@ -571,8 +692,16 @@ local function renderScreen3Selecting()
     for _, qtyNum in ipairs(quantities) do
         table.insert(options, { item = state.selectedMaterial.item, label = tostring(qtyNum), count = qtyNum })
     end
-    updateUI()
-    setPedestalOptions(options)
+    -- Update UI and pedestals in parallel
+    local ok, err = pcall(parallel.waitForAll,
+        function() updateUI() end,
+        function() setPedestalOptions(options) end
+    )
+    if not ok then
+        writeLog("WARN", "Parallel render failed: " .. tostring(err) .. ", falling back to sequential")
+        updateUI()
+        setPedestalOptions(options)
+    end
 end
 
 -- Screen 3: Payment (confirming sub-state)
@@ -613,9 +742,6 @@ local function renderScreen3Confirming()
         return
     end
 
-    -- Update UI (hint will show price and insert instruction)
-    updateUI()
-
     -- Create options for all available quantities
     local options = {}
     for _, qtyNum in ipairs(state.availableQuantities) do
@@ -625,7 +751,17 @@ local function renderScreen3Confirming()
             count = qtyNum
         })
     end
-    setPedestalOptions(options)
+
+    -- Update UI and pedestals in parallel
+    local ok, err = pcall(parallel.waitForAll,
+        function() updateUI() end,
+        function() setPedestalOptions(options) end
+    )
+    if not ok then
+        writeLog("WARN", "Parallel render failed: " .. tostring(err) .. ", falling back to sequential")
+        updateUI()
+        setPedestalOptions(options)
+    end
 
     -- Update pedestal labels: selected quantity gets brackets
     for idx, opt in pairs(state.currentOptions) do
@@ -664,8 +800,16 @@ end
 
 -- Screen 4: Thank you
 local function renderScreen4()
-    clearPedestals()
-    updateUI()
+    -- Clear pedestals and update UI in parallel
+    local ok, err = pcall(parallel.waitForAll,
+        function() clearPedestals() end,
+        function() updateUI() end
+    )
+    if not ok then
+        writeLog("WARN", "Parallel clear/render failed: " .. tostring(err) .. ", falling back to sequential")
+        clearPedestals()
+        updateUI()
+    end
     -- Play noteblock sound
     playNoteblockSound()
     -- Log purchase
