@@ -3,7 +3,10 @@
 
 local basalt = require("basalt")
 
--- Debug logging
+-- ============================================================================
+-- Logging
+-- ============================================================================
+
 local LOG_FILE = "/ccshop/shop_debug.log"
 local LOG_LEVELS = {DEBUG = 1, INFO = 2, WARN = 3, ERROR = 4}
 local CURRENT_LOG_LEVEL = LOG_LEVELS[LOG_LEVEL] or LOG_LEVELS.INFO
@@ -41,7 +44,10 @@ dofile("/ccshop/config.lua")
 dofile("/ccshop/items.lua")
 local db = dofile("/ccshop/db.lua")
 
--- Validate configuration and items
+-- ============================================================================
+-- Configuration Validation
+-- ============================================================================
+
 local function validateAll()
     -- 1. Validate peripherals
     local ok, err = validatePeripherals()
@@ -100,7 +106,10 @@ local function validateAll()
     return true
 end
 
--- Global state (as per spec)
+-- ============================================================================
+-- Global State
+-- ============================================================================
+
 local state = {
     screen = 1,               -- 1=category, 2=materials, 3=quantity/payment, 4=thankyou
     subState = nil,           -- nil, "selecting", or "confirming" (screen 3 only)
@@ -120,6 +129,10 @@ local state = {
     paymentCheckCount = 0,    -- counter for payment detection checks
 }
 
+-- ============================================================================
+-- Forward declarations
+-- ============================================================================
+
 -- Forward declaration for renderCurrentScreen (defined later)
 local renderCurrentScreen
 
@@ -127,7 +140,10 @@ local renderCurrentScreen
 local getAllRelayInputs, debugRelayInputs
 local paymentMonitorThread  -- dedicated thread for payment detection
 
--- Peripheral wrappers (initialized after validation)
+-- ============================================================================
+-- Peripheral Wrappers & Cache
+-- ============================================================================
+
 local relayLock, ae2Adapter, depositor, relayNote, monitor, pedestals
 local pedestalIndexByName, pedestalObjectToIndex
 local ae2Cache = {
@@ -136,7 +152,10 @@ local ae2Cache = {
     ttl = AE2_CACHE_TTL or 30
 }
 
--- Initialize peripherals
+-- ============================================================================
+-- Peripheral Initialization
+-- ============================================================================
+
 local function initPeripherals()
     writeLog("INFO", "Initializing peripherals")
     relayLock = peripheral.wrap(RELAY_LOCK)
@@ -183,7 +202,10 @@ local function initPeripherals()
     pcall(relayLock.setOutput, "bottom", true)
 end
 
--- Helper: refresh AE2 stock cache
+-- ============================================================================
+-- AE2 Stock Cache
+-- ============================================================================
+
 local function refreshAE2Cache()
     if not ae2Adapter then
         writeLog("DEBUG", "AE2 adapter not available, cannot refresh cache")
@@ -287,7 +309,11 @@ local function debugRelayInputs()
     writeLog("DEBUG", "Relay inputs: " .. table.concat(results, ", "))
 end
 
--- Helper: set pedestal label with selection brackets
+-- ============================================================================
+-- Pedestal Helpers
+-- ============================================================================
+
+-- Set pedestal label with selection brackets
 local function setPedestalSelection(pedestalIdx, selected)
     writeLog("DEBUG", "setPedestalSelection: idx=" .. pedestalIdx .. ", selected=" .. tostring(selected))
     local opt = state.currentOptions[pedestalIdx]
@@ -531,10 +557,10 @@ local function setPedestalOptions(options)
     setPedestalOptionsParallel(options)
 end
 
+-- ============================================================================
+-- Basalt UI
+-- ============================================================================
 
--- Parallel version of setPedestalOptions
-
--- Basalt UI elements
 local frame, headerLabel, hintLabel, cancelButton
 
 -- Create UI frame
@@ -611,6 +637,10 @@ local function updateUI()
         if cancelButton and cancelButton.setVisible then cancelButton:setVisible(false) end
     end
 end
+
+-- ============================================================================
+-- Screen Rendering Functions
+-- ============================================================================
 
 -- Screen 1: Category selection
 local function renderScreen1()
@@ -870,6 +900,10 @@ renderCurrentScreen = function()
 end
 
 
+-- ============================================================================
+-- Event Handling
+-- ============================================================================
+
 -- Map pedestal object/name to index
 local function getPedestalIndex(eventData)
     local pedestalIndex = nil
@@ -1084,6 +1118,10 @@ local function handlePedestalClick(event, eventData)
     end
 end
 
+-- ============================================================================
+-- Timeout & Payment Detection
+-- ============================================================================
+
 -- Check idle timeout
 local function checkIdleTimeout()
     if (state.screen == 2) or (state.screen == 3 and state.subState) then
@@ -1107,8 +1145,6 @@ local function checkIdleTimeout()
         end
     end
 end
-
--- Get all relay input sides as table side->value
 
 -- Check payment detection
 local function checkPaymentDetection()
@@ -1176,6 +1212,10 @@ local function checkPaymentDetection()
         end
     end
 end
+-- ============================================================================
+-- Main Loops
+-- ============================================================================
+
 -- Payment monitor loop - runs continuously in parallel thread
 local function paymentMonitorLoop()
     writeLog("INFO", "Payment monitor thread started")
@@ -1216,7 +1256,10 @@ local function eventLoop()
     end
 end
 
--- Main
+-- ============================================================================
+-- Main Execution
+-- ============================================================================
+
 writeLog("INFO", "Starting shop system...")
 local ok, err = pcall(function()
     validateAll()
