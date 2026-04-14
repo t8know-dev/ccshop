@@ -342,6 +342,20 @@ local function clearSinglePedestal(idx)
     if not ok2 then writeLog("WARN", "Pedestal " .. idx .. " setLabelRendered failed: " .. tostring(err2)) end
 end
 
+-- Helper: center options across available pedestals
+-- Given number of options (<= #PEDESTALS), returns table of pedestal indices to use
+local function centerPedestalIndices(numOptions)
+    local total = #PEDESTALS
+    if numOptions > total then numOptions = total end
+    local start = math.floor((total - numOptions) / 2) + 1
+    local indices = {}
+    for i = start, start + numOptions - 1 do
+        table.insert(indices, i)
+    end
+    writeLog("DEBUG", "centerPedestalIndices: numOptions=" .. numOptions .. " total=" .. total .. " start=" .. start .. " indices: " .. table.concat(indices, ","))
+    return indices
+end
+
 -- Sequential pedestal update (fallback when parallel rendering is disabled)
 local function sequentialPedestalUpdate(options)
     local indices = centerPedestalIndices(#options)
@@ -489,19 +503,6 @@ local function clearPedestals()
     end
 end
 
--- Helper: center options across available pedestals
--- Given number of options (<= #PEDESTALS), returns table of pedestal indices to use
-local function centerPedestalIndices(numOptions)
-    local total = #PEDESTALS
-    if numOptions > total then numOptions = total end
-    local start = math.floor((total - numOptions) / 2) + 1
-    local indices = {}
-    for i = start, start + numOptions - 1 do
-        table.insert(indices, i)
-    end
-    writeLog("DEBUG", "centerPedestalIndices: numOptions=" .. numOptions .. " total=" .. total .. " start=" .. start .. " indices: " .. table.concat(indices, ","))
-    return indices
-end
 
 -- Helper: update pedestals with items and labels
 local function setPedestalOptions(options)
