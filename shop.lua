@@ -326,10 +326,13 @@ local function clearPedestals()
 
     -- Execute in parallel with fallback
     if #clearTasks > 0 then
-        local ok, err = pcall(parallel.waitForAll, table.unpack(clearTasks))
+        writeLog("DEBUG", "Executing " .. #clearTasks .. " clear tasks in parallel")
+        local ok, err = pcall(parallel.waitForAll, unpack(clearTasks))
         if not ok then
             writeLog("WARN", "Parallel clear failed: " .. tostring(err) .. ", falling back to sequential")
             for _, task in ipairs(clearTasks) do task() end
+        else
+            writeLog("DEBUG", "Parallel clear completed")
         end
     end
 end
@@ -470,6 +473,7 @@ end
 -- Parallel version of setPedestalOptions
 local function setPedestalOptionsParallel(options)
     -- If parallel rendering disabled, fallback to sequential
+    writeLog("DEBUG", "setPedestalOptionsParallel: " .. #options .. " options, PARALLEL_RENDERING=" .. tostring(PARALLEL_RENDERING))
     if PARALLEL_RENDERING == false then
         sequentialPedestalUpdate(options)
         return
@@ -509,16 +513,20 @@ local function setPedestalOptionsParallel(options)
     end
 
     -- Execute all tasks in parallel
+    writeLog("DEBUG", "Created " .. #updateTasks .. " update tasks, " .. #clearTasks .. " clear tasks")
     local allTasks = {}
     for _, task in ipairs(updateTasks) do table.insert(allTasks, task) end
     for _, task in ipairs(clearTasks) do table.insert(allTasks, task) end
 
     if #allTasks > 0 then
-        local ok, err = pcall(parallel.waitForAll, table.unpack(allTasks))
+        writeLog("DEBUG", "Executing " .. #allTasks .. " tasks in parallel")
+        local ok, err = pcall(parallel.waitForAll, unpack(allTasks))
         if not ok then
             writeLog("WARN", "Parallel pedestal update failed: " .. tostring(err) .. ", falling back to sequential")
             -- Fallback to sequential execution
             for _, task in ipairs(allTasks) do task() end
+        else
+            writeLog("DEBUG", "Parallel pedestal update completed")
         end
     end
 end
@@ -610,6 +618,7 @@ local function renderScreen1()
         table.insert(options, { item = cat.item, label = cat.label })
     end
     -- Update UI and pedestals in parallel
+    writeLog("DEBUG", "Starting parallel UI and pedestal update")
     local ok, err = pcall(parallel.waitForAll,
         function() updateUI() end,
         function() setPedestalOptions(options) end
@@ -618,6 +627,8 @@ local function renderScreen1()
         writeLog("WARN", "Parallel render failed: " .. tostring(err) .. ", falling back to sequential")
         updateUI()
         setPedestalOptions(options)
+    else
+        writeLog("DEBUG", "Parallel render completed")
     end
 end
 
