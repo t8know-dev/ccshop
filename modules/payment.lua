@@ -30,6 +30,7 @@ local function checkIdleTimeout()
                 selectedQty = nil,
                 subState = nil,
                 paymentPaid = false,
+                cancelRequested = false,
                 paymentCheckCount = 0,
                 paymentBaseline = nil,
                 paymentDeadline = nil
@@ -50,7 +51,9 @@ local function checkPaymentDetection()
     local paymentPaid = state.getState("paymentPaid")
     local cancelRequested = state.getState("cancelRequested")
     if screen == 3 and subState == 'confirming' and not paymentPaid and not cancelRequested then
+        logging.writeLog("DEBUG", "checkPaymentDetection: screen=3 subState=confirming paymentPaid="..tostring(paymentPaid).." cancelRequested="..tostring(cancelRequested))
         local paymentDeadline = state.getState("paymentDeadline")
+        logging.writeLog("DEBUG", "checkPaymentDetection: paymentDeadline="..tostring(paymentDeadline).." os.clock()="..os.clock())
         if paymentDeadline and (os.clock() >= paymentDeadline) then
             logging.writeLog("INFO", "Payment timeout reached, locking depositor and returning to main screen")
             peripherals.lockDepositor()  -- lock depositor
@@ -61,6 +64,7 @@ local function checkPaymentDetection()
                 selectedQty = nil,
                 subState = nil,
                 paymentPaid = false,
+                cancelRequested = false,
                 paymentCheckCount = 0,
                 paymentBaseline = nil,
                 paymentDeadline = nil
@@ -86,6 +90,9 @@ local function checkPaymentDetection()
             -- First, check the configured payment detection side specifically (most likely)
             local paymentSide = PAYMENT_DETECTION_SIDE or "bottom"
             local paymentBaseline = state.getState("paymentBaseline")
+            if not paymentBaseline then
+                logging.writeLog("DEBUG", "paymentBaseline is nil, cannot detect payment")
+            end
             if paymentBaseline and paymentBaseline[paymentSide] ~= nil and currentInputs[paymentSide] ~= nil then
                 if currentInputs[paymentSide] ~= paymentBaseline[paymentSide] then
                     paymentDetected = true
@@ -111,11 +118,11 @@ local function checkPaymentDetection()
                 logging.writeLog("INFO", "PAYMENT DETECTED on side " .. tostring(changedSide) .. "! current=" .. tostring(currentInputs[changedSide]) .. " baseline=" .. tostring(paymentBaseline[changedSide]))
                 logging.writeLog("INFO", "All sides: " .. textutils.serialize(currentInputs))
                 peripherals.lockDepositor()  -- lock depositor
-                state.updateState({ paymentPaid = true, screen = 4, paymentDeadline = nil })
+                state.updateState({ paymentPaid = true, screen = 4, paymentDeadline = nil, cancelRequested = false })
             else
                 -- Log only occasionally to avoid spam
                 if paymentCheckCount % 40 == 0 then
-                    logging.writeLog("DEBUG", "Payment detection check #" .. paymentCheckCount .. ", no change on any side")
+                    logging.writeLog("DEBUG", "Payment detection check #" .. paymentCheckCount .. ", no change on any side. Baseline: " .. textutils.serialize(state.getState("paymentBaseline")) .. " Current: " .. textutils.serialize(currentInputs))
                 end
             end
         end

@@ -102,7 +102,8 @@ local function handleScreen1Click(pedestalIndex, pedestalOption, side, itemId)
         if catIdx then
             state.updateState({
                 selectedCategory = CATEGORIES[catIdx].label,
-                screen = 2
+                screen = 2,
+                paymentDeadline = nil
             })
         end
     end
@@ -147,7 +148,8 @@ local function handleScreen2Click(pedestalIndex, pedestalOption, side, itemId)
             state.updateState({
                 selectedMaterial = materialsInCategory[matIdx],
                 screen = 3,
-                subState = 'selecting'
+                subState = 'selecting',
+                paymentDeadline = nil
             })
         else
         end

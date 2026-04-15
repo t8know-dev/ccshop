@@ -158,6 +158,7 @@ local function renderScreen3Confirming()
     -- Set depositor price
     local ok, err = pcall(peripherals.getDepositor().setTotalPrice, price)
     if not ok then
+        logging.writeLog("ERROR", "Depositor setTotalPrice failed: " .. tostring(err))
         ui.getHintLabel():setText(MSG.error_deposit)
         os.sleep(2)
         state.updateState({ screen = 1, paymentDeadline = nil })
@@ -208,6 +209,7 @@ local function renderScreen3Confirming()
     os.sleep(0.5)  -- Give depositor time to stabilize
     -- Get baseline for all sides
     local baselineTable = peripherals.getAllRelayInputs()
+    logging.writeLog("DEBUG", "Payment baseline table: " .. textutils.serialize(baselineTable))
     state.updateState({
         paymentBaseline = baselineTable,
         paymentDeadline = os.clock() + PAYMENT_TIMEOUT,
