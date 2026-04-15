@@ -13,13 +13,23 @@ local function init(loggingModule, stateModule, peripheralsModule, screensModule
 end
 
 -- Check idle timeout
+local lastLoggedActivity = nil
+local idleWarningLogged = false
 local function checkIdleTimeout()
     local screen = state.getState("screen")
     local subState = state.getState("subState")
-    logging.writeLog("DEBUG", "checkIdleTimeout: screen="..tostring(screen).." subState="..tostring(subState).." lastActivity="..tostring(state.getState("lastActivity")))
     if (screen == 2) or (screen == 3 and subState) then
         local lastActivity = state.getState("lastActivity")
-        logging.writeLog("DEBUG", "checkIdleTimeout: lastActivity="..tostring(lastActivity).." os.clock()="..os.clock().." diff="..(lastActivity and tostring(os.clock() - lastActivity) or "nil"))
+        -- Reset warning if lastActivity changed
+        if lastActivity ~= lastLoggedActivity then
+            lastLoggedActivity = lastActivity
+            idleWarningLogged = false
+        end
+        -- Log warning when approaching idle timeout (last 10 seconds) - only once
+        if lastActivity and not idleWarningLogged and os.clock() - lastActivity > IDLE_TIMEOUT - 10 and os.clock() - lastActivity <= IDLE_TIMEOUT then
+            logging.writeLog("DEBUG", "checkIdleTimeout: approaching idle timeout, " .. string.format("%.1f", os.clock() - lastActivity) .. " seconds since last activity")
+            idleWarningLogged = true
+        end
         if lastActivity and os.clock() - lastActivity > IDLE_TIMEOUT then
             -- Timeout: lock depositor if in confirming state, reset to screen 1
             if screen == 3 and subState == 'confirming' then
@@ -53,14 +63,18 @@ local function checkPaymentDetection()
     local subState = state.getState("subState")
     local paymentPaid = state.getState("paymentPaid")
     local cancelRequested = state.getState("cancelRequested")
-    logging.writeLog("DEBUG", "checkPaymentDetection entry: screen="..tostring(screen).." subState="..tostring(subState).." paymentPaid="..tostring(paymentPaid).." cancelRequested="..tostring(cancelRequested).." paymentDeadline="..tostring(state.getState("paymentDeadline")))
     if screen == 3 and subState == 'confirming' and not paymentPaid and not cancelRequested then
-        logging.writeLog("DEBUG", "checkPaymentDetection: screen=3 subState=confirming paymentPaid="..tostring(paymentPaid).." cancelRequested="..tostring(cancelRequested))
         local paymentDeadline = state.getState("paymentDeadline")
-        logging.writeLog("DEBUG", "checkPaymentDetection: paymentDeadline="..tostring(paymentDeadline).." os.clock()="..os.clock())
-        if paymentDeadline then
-            local diff = paymentDeadline - os.clock()
-            logging.writeLog("DEBUG", "checkPaymentDetection: time remaining="..string.format("%.3f", diff).." seconds")
+        local paymentCheckCount = state.getState("paymentCheckCount") or 0
+
+        -- Log only first few checks
+        if paymentCheckCount <= 3 then
+            logging.writeLog("DEBUG", "checkPaymentDetection: screen=3 subState=confirming paymentPaid="..tostring(paymentPaid).." cancelRequested="..tostring(cancelRequested))
+            logging.writeLog("DEBUG", "checkPaymentDetection: paymentDeadline="..tostring(paymentDeadline).." os.clock()="..os.clock())
+            if paymentDeadline then
+                local diff = paymentDeadline - os.clock()
+                logging.writeLog("DEBUG", "checkPaymentDetection: time remaining="..string.format("%.3f", diff).." seconds")
+            end
         end
         if paymentDeadline and (os.clock() >= paymentDeadline) then
             logging.writeLog("INFO", "Payment timeout reached, locking depositor and returning to main screen")
