@@ -209,7 +209,7 @@ local function renderScreen3Confirming()
     os.sleep(0.5)  -- Give depositor time to stabilize
     -- Get baseline for all sides
     local baselineTable = peripherals.getAllRelayInputs()
-    logging.writeLog("DEBUG", "Payment baseline table: " .. textutils.serialize(baselineTable))
+    -- logging.writeLog("DEBUG", "Payment baseline table: " .. textutils.serialize(baselineTable))
     logging.writeLog("DEBUG", "renderScreen3Confirming: PAYMENT_TIMEOUT="..tostring(PAYMENT_TIMEOUT).." os.clock()="..os.clock())
     state.updateState({
         paymentBaseline = baselineTable,
