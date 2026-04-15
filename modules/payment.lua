@@ -58,11 +58,24 @@ local function checkIdleTimeout()
 end
 
 -- Check payment detection
+local checkPaymentEntryCount = 0
 local function checkPaymentDetection()
     local screen = state.getState("screen")
     local subState = state.getState("subState")
     local paymentPaid = state.getState("paymentPaid")
     local cancelRequested = state.getState("cancelRequested")
+
+    -- Reset counter if not in screen 3 confirming
+    if not (screen == 3 and subState == 'confirming') then
+        checkPaymentEntryCount = 0
+    end
+
+    -- Diagnostic logging for first 5 entries when in screen 3 confirming
+    if screen == 3 and subState == 'confirming' and checkPaymentEntryCount < 5 then
+        checkPaymentEntryCount = checkPaymentEntryCount + 1
+        logging.writeLog("DEBUG", "checkPaymentDetection diag: screen=3 subState=confirming paymentPaid="..tostring(paymentPaid).." cancelRequested="..tostring(cancelRequested).." entryCount="..checkPaymentEntryCount)
+    end
+
     if screen == 3 and subState == 'confirming' and not paymentPaid and not cancelRequested then
         local paymentDeadline = state.getState("paymentDeadline")
         local paymentCheckCount = state.getState("paymentCheckCount") or 0
@@ -154,6 +167,7 @@ end
 -- Payment monitor loop - runs continuously in parallel thread
 local function paymentMonitorLoop()
     logging.writeLog("INFO", "Payment monitor thread started")
+    local iterationCount = 0
     while true do
         local ok, err = pcall(function()
             -- Check idle timeout
@@ -163,6 +177,15 @@ local function paymentMonitorLoop()
             checkPaymentDetection()
 
             os.sleep(0.02)  -- 20ms check interval - fast enough to catch short pulses
+            iterationCount = iterationCount + 1
+            -- Log every 500 iterations (10 seconds) when in screen 3 confirming for debugging
+            if iterationCount % 500 == 0 then
+                local screen = state.getState("screen")
+                local subState = state.getState("subState")
+                if screen == 3 and subState == 'confirming' then
+                    logging.writeLog("DEBUG", "paymentMonitorLoop alive, iteration="..iterationCount.." screen=3 confirming")
+                end
+            end
         end)
         if not ok then
             logging.writeLog("ERROR", "Payment monitor loop error: " .. tostring(err))
