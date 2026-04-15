@@ -49,7 +49,8 @@ local function checkPaymentDetection()
     local paymentPaid = state.getState("paymentPaid")
     local cancelRequested = state.getState("cancelRequested")
     if screen == 3 and subState == 'confirming' and not paymentPaid and not cancelRequested then
-        if os.clock() >= state.getState("paymentDeadline") then
+        local paymentDeadline = state.getState("paymentDeadline")
+        if paymentDeadline and os.clock() >= paymentDeadline then
             logging.writeLog("INFO", "Payment timeout reached, locking depositor and returning to main screen")
             peripherals.lockDepositor()  -- lock depositor
             state.updateState({
@@ -68,7 +69,11 @@ local function checkPaymentDetection()
             local paymentCheckCount = state.getState("paymentCheckCount")
             -- Log first few checks and then periodically
             if paymentCheckCount <= 10 or paymentCheckCount % 20 == 0 then
-                logging.writeLog("DEBUG", "Payment detection check #" .. paymentCheckCount .. ", deadline in " .. string.format("%.1f", state.getState("paymentDeadline") - os.clock()) .. "s")
+                local deadlineStr = "deadline not set"
+                if paymentDeadline then
+                    deadlineStr = string.format("%.1f", paymentDeadline - os.clock()) .. "s"
+                end
+                logging.writeLog("DEBUG", "Payment detection check #" .. paymentCheckCount .. ", " .. deadlineStr)
                 if paymentCheckCount <= 5 or paymentCheckCount % 30 == 0 then
                     peripherals.debugRelayInputs()
                 end
