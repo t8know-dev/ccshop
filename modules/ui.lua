@@ -43,20 +43,9 @@ local function createUI()
             -- Lock depositor if on payment screen (screen 3 confirming)
             if state.getState("screen") == 3 and state.getState("subState") == "confirming" then
                 peripherals.lockDepositor()
-                state.updateState({ cancelRequested = true, paymentPaid = false })
             end
             -- Reset to main screen
-            state.updateState({
-                screen = 1,
-                selectedCategory = nil,
-                selectedMaterial = nil,
-                selectedQty = nil,
-                subState = nil,
-                cancelRequested = false,
-                paymentCheckCount = 0,
-                paymentBaseline = nil,
-                paymentDeadline = nil
-            })
+            state.resetToMainScreen()
             -- Trigger screen render via callback? The main loop will call renderCurrentScreen.
             -- For now, we need to call renderCurrentScreen; but we don't have access to screens module.
             -- We'll rely on the main loop to detect state changes and re-render.

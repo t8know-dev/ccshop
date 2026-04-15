@@ -12,7 +12,6 @@ local state = {
     currentOptions = {},      -- pedestal index -> option table (item, label, count)
     currentPedestalIndices = {}, -- which pedestal indices are currently used
     lastSelectedPedestal = nil, -- last selected pedestal index
-    cancelRequested = false,
     availableQuantities = nil, -- list of numeric quantities available for selected material
     paymentBaseline = nil,    -- baseline relay input state for payment detection
     paymentDeadline = nil,    -- os.clock() deadline for payment timeout
@@ -64,7 +63,6 @@ local function resetState()
         currentOptions = {},
         currentPedestalIndices = {},
         lastSelectedPedestal = nil,
-        cancelRequested = false,
         availableQuantities = nil,
         paymentBaseline = nil,
         paymentDeadline = nil,
@@ -72,6 +70,23 @@ local function resetState()
         paymentCheckCount = 0,
     }
     updateState(initialState)
+end
+
+-- Reset to main screen (preserves lastActivity, currentOptions, etc.)
+local function resetToMainScreen()
+    updateState({
+        screen = 1,
+        selectedCategory = nil,
+        selectedMaterial = nil,
+        selectedQty = nil,
+        subState = nil,
+        calculatedPrice = nil,
+        availableQuantities = nil,
+        paymentPaid = false,
+        paymentCheckCount = 0,
+        paymentBaseline = nil,
+        paymentDeadline = nil
+    })
 end
 
 -- Subscribe to state changes
@@ -90,6 +105,7 @@ return {
     getState = getState,
     updateState = updateState,
     resetState = resetState,
+    resetToMainScreen = resetToMainScreen,
     subscribe = subscribe,
     notifyChanges = notifyChanges
 }

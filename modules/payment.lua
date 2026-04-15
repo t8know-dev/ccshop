@@ -36,18 +36,7 @@ local function checkIdleTimeout()
                 peripherals.lockDepositor()
             end
             logging.writeLog("INFO", "Idle timeout triggered, returning to screen 1")
-            state.updateState({
-                screen = 1,
-                selectedCategory = nil,
-                selectedMaterial = nil,
-                selectedQty = nil,
-                subState = nil,
-                paymentPaid = false,
-                cancelRequested = false,
-                paymentCheckCount = 0,
-                paymentBaseline = nil,
-                paymentDeadline = nil
-            })
+            state.resetToMainScreen()
             -- Show timeout message on hint label (requires ui module)
             -- We'll need to access ui.getHintLabel(); but we don't have ui dependency.
             -- For now, we'll skip. The main script can handle this.
@@ -63,7 +52,6 @@ local function checkPaymentDetection()
     local screen = state.getState("screen")
     local subState = state.getState("subState")
     local paymentPaid = state.getState("paymentPaid")
-    local cancelRequested = state.getState("cancelRequested")
 
     -- Reset counter if not in screen 3 confirming
     if not (screen == 3 and subState == 'confirming') then
@@ -73,16 +61,16 @@ local function checkPaymentDetection()
     -- Diagnostic logging for first 5 entries when in screen 3 confirming
     if screen == 3 and subState == 'confirming' and checkPaymentEntryCount < 5 then
         checkPaymentEntryCount = checkPaymentEntryCount + 1
-        logging.writeLog("DEBUG", "checkPaymentDetection diag: screen=3 subState=confirming paymentPaid="..tostring(paymentPaid).." cancelRequested="..tostring(cancelRequested).." entryCount="..checkPaymentEntryCount)
+        logging.writeLog("DEBUG", "checkPaymentDetection diag: screen=3 subState=confirming paymentPaid="..tostring(paymentPaid).." entryCount="..checkPaymentEntryCount)
     end
 
-    if screen == 3 and subState == 'confirming' and not paymentPaid and not cancelRequested then
+    if screen == 3 and subState == 'confirming' and not paymentPaid then
         local paymentDeadline = state.getState("paymentDeadline")
         local paymentCheckCount = state.getState("paymentCheckCount") or 0
 
         -- Log only first few checks
         if paymentCheckCount <= 3 then
-            logging.writeLog("DEBUG", "checkPaymentDetection: screen=3 subState=confirming paymentPaid="..tostring(paymentPaid).." cancelRequested="..tostring(cancelRequested))
+            logging.writeLog("DEBUG", "checkPaymentDetection: screen=3 subState=confirming paymentPaid="..tostring(paymentPaid))
             logging.writeLog("DEBUG", "checkPaymentDetection: paymentDeadline="..tostring(paymentDeadline).." os.clock()="..os.clock())
             if paymentDeadline then
                 local diff = paymentDeadline - os.clock()
@@ -92,18 +80,7 @@ local function checkPaymentDetection()
         if paymentDeadline and (os.clock() >= paymentDeadline) then
             logging.writeLog("INFO", "Payment timeout reached, locking depositor and returning to main screen")
             peripherals.lockDepositor()  -- lock depositor
-            state.updateState({
-                screen = 1,
-                selectedCategory = nil,
-                selectedMaterial = nil,
-                selectedQty = nil,
-                subState = nil,
-                paymentPaid = false,
-                cancelRequested = false,
-                paymentCheckCount = 0,
-                paymentBaseline = nil,
-                paymentDeadline = nil
-            })
+            state.resetToMainScreen()
         else
             state.updateState({ paymentCheckCount = state.getState("paymentCheckCount") + 1 })
             local paymentCheckCount = state.getState("paymentCheckCount")
@@ -153,7 +130,7 @@ local function checkPaymentDetection()
                 logging.writeLog("INFO", "PAYMENT DETECTED on side " .. tostring(changedSide) .. "! current=" .. tostring(currentInputs[changedSide]) .. " baseline=" .. tostring(paymentBaseline[changedSide]))
                 logging.writeLog("INFO", "All sides: " .. textutils.serialize(currentInputs))
                 peripherals.lockDepositor()  -- lock depositor
-                state.updateState({ paymentPaid = true, screen = 4, paymentDeadline = nil, cancelRequested = false })
+                state.updateState({ paymentPaid = true, screen = 4, paymentDeadline = nil })
             else
                 -- Log only occasionally to avoid spam
                 if paymentCheckCount % 40 == 0 then

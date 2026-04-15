@@ -157,6 +157,7 @@ local function handleScreen2Click(pedestalIndex, pedestalOption, side, itemId)
         -- Back to screen 1
         state.updateState({
             screen = 1,
+            selectedCategory = nil,
             paymentBaseline = nil,
             paymentCheckCount = 0,
             paymentDeadline = nil
@@ -183,6 +184,7 @@ local function handleScreen3Click(pedestalIndex, pedestalOption, side, selectedC
             -- LMB goes back to material selection
             state.updateState({
                 screen = 2,
+                selectedMaterial = nil,
                 subState = nil,
                 paymentBaseline = nil,
                 paymentCheckCount = 0,

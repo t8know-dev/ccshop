@@ -64,7 +64,7 @@ local function renderScreen2()
     if #options == 0 then
         -- No materials available, go back to screen 1
         logging.writeLog("WARN", "No materials available, returning to screen 1")
-        state.updateState({ screen = 1, paymentDeadline = nil })
+        state.updateState({ screen = 1, selectedCategory = nil, paymentDeadline = nil })
         -- Recursive call; but we need to avoid infinite recursion. Use renderCurrentScreen.
         -- We'll call renderCurrentScreen via the main loop. For now, just update state.
         return
@@ -104,7 +104,7 @@ local function renderScreen3Selecting()
     if #quantities == 0 then
         -- No quantities available (stock less than minQty) – should not happen
         logging.writeLog("WARN", "No quantities available, returning to screen 2")
-        state.updateState({ screen = 2, paymentDeadline = nil })
+        state.updateState({ screen = 2, selectedMaterial = nil, paymentDeadline = nil })
         return
     end
     local options = {}
@@ -161,7 +161,7 @@ local function renderScreen3Confirming()
         logging.writeLog("ERROR", "Depositor setTotalPrice failed: " .. tostring(err))
         ui.getHintLabel():setText(MSG.error_deposit)
         os.sleep(2)
-        state.updateState({ screen = 1, paymentDeadline = nil })
+        state.resetToMainScreen()
         return
     end
 
@@ -215,7 +215,6 @@ local function renderScreen3Confirming()
         paymentBaseline = baselineTable,
         paymentDeadline = os.clock() + PAYMENT_TIMEOUT,
         paymentPaid = false,
-        cancelRequested = false,
         paymentCheckCount = 0
     })
 
@@ -262,19 +261,7 @@ local function renderScreen4()
     logging.writeLog("INFO", "[MOCK] Dispense " .. selectedQty .. "x " .. selectedMaterial.item)
     -- Auto-return to screen 1 after CONFIRM_DELAY seconds
     os.sleep(CONFIRM_DELAY)
-    state.updateState({
-        screen = 1,
-        selectedCategory = nil,
-        selectedMaterial = nil,
-        selectedQty = nil,
-        subState = nil,
-        calculatedPrice = nil,
-        paymentPaid = false,
-        cancelRequested = false,
-        paymentCheckCount = 0,
-        paymentBaseline = nil,
-        paymentDeadline = nil
-    })
+    state.resetToMainScreen()
 end
 
 -- Update screen based on state

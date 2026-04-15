@@ -27,7 +27,7 @@ The system is split across multiple Lua files for modularity:
   - **logging.lua** — Logging utilities with log level control.
   - **config.lua** — Enhanced configuration loading and validation.
   - **peripherals.lua** — Peripheral management, AE2 cache, relay helpers.
-  - **state.lua** — Centralized state management with observer pattern.
+  - **state.lua** — Centralized state management with observer pattern and reset functions.
   - **pedestal.lua** — Pedestal rendering and management.
   - **ui.lua** — Basalt UI creation and updates.
   - **screens.lua** — Screen rendering logic.
@@ -111,7 +111,7 @@ QUANTITIES = { 1, 8, 32, 64, 256, 512, 1024, "4k", "16k", "32k" }
 Helpers `quantityToNumber(qty)` and `findQuantityIndex(num)` convert between string/numeric representations.
 
 ### State (`modules/state.lua`)
-The state is managed by the `state.lua` module, which provides controlled access via `state.getState()` and `state.updateState(changes)` functions. The state structure remains:
+The state is managed by the `state.lua` module, which provides controlled access via `state.getState()`, `state.updateState(changes)`, `state.resetState()`, and `state.resetToMainScreen()` functions. `resetToMainScreen()` is the preferred way to reset to the main screen (clears selections and payment fields while preserving `lastActivity` and pedestal state). The state structure remains:
 
 ```lua
 local state = {
@@ -125,11 +125,11 @@ local state = {
     currentOptions = {},      -- pedestal index → option table { item, label, qty/category/material }
     currentPedestalIndices = {}, -- which pedestal indices are currently used
     lastSelectedPedestal = nil, -- last selected pedestal index
-    cancelRequested = false,
     availableQuantities = nil, -- list of numeric quantities available for selected material
     paymentBaseline = nil,    -- baseline relay input state for payment detection
     paymentDeadline = nil,    -- os.clock() deadline for payment timeout
     paymentPaid = false,
+    paymentCheckCount = 0,    -- counter for payment detection checks
 }
 ```
 
