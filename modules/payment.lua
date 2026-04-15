@@ -32,7 +32,6 @@ local function checkIdleTimeout()
                 paymentCheckCount = 0,
                 paymentBaseline = nil
             })
-            screens.renderCurrentScreen()
             -- Show timeout message on hint label (requires ui module)
             -- We'll need to access ui.getHintLabel(); but we don't have ui dependency.
             -- For now, we'll skip. The main script can handle this.
@@ -62,7 +61,6 @@ local function checkPaymentDetection()
                 paymentCheckCount = 0,
                 paymentBaseline = nil
             })
-            screens.renderCurrentScreen()
         else
             state.updateState({ paymentCheckCount = state.getState("paymentCheckCount") + 1 })
             local paymentCheckCount = state.getState("paymentCheckCount")
@@ -104,7 +102,6 @@ local function checkPaymentDetection()
                 logging.writeLog("INFO", "All sides: " .. textutils.serialize(currentInputs))
                 peripherals.lockDepositor()  -- lock depositor
                 state.updateState({ paymentPaid = true, screen = 4 })
-                screens.renderCurrentScreen()
             else
                 -- Log only occasionally to avoid spam
                 if paymentCheckCount % 40 == 0 then

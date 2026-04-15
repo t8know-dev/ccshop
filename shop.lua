@@ -59,7 +59,7 @@ payment.init(logging, state, peripherals, screens, config)
 -- State change listener: trigger screen re‑render when screen changes
 -- ============================================================================
 state.subscribe(function(changes)
-    if changes.screen ~= nil then
+    if changes.screen ~= nil or changes.subState ~= nil or changes.selectedQty ~= nil then
         screens.renderCurrentScreen()
     end
 end)

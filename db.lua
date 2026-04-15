@@ -6,7 +6,7 @@ local PURCHASES_FILE = "/ccshop/purchases.json"
 -- record = { timestamp, playerName (nil ok), category, item, qty, price }
 function log(record)
   -- Ensure required fields
-  if not record.timestamp then record.timestamp = os.epoch("utc") end
+  if not record.timestamp then record.timestamp = os.time() end
   if not record.category or not record.item or not record.qty or not record.price then
     error("db.log: missing required fields")
   end

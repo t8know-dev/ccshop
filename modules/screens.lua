@@ -244,7 +244,7 @@ local function renderScreen4()
     local selectedQty = state.getState("selectedQty")
     local calculatedPrice = state.getState("calculatedPrice")
     local record = {
-        timestamp = os.epoch("utc"),
+        timestamp = os.time(),
         playerName = nil, -- not tracked yet
         category = selectedCategory,
         item = selectedMaterial.item,
@@ -275,9 +275,11 @@ end
 
 -- Update screen based on state
 local function renderCurrentScreen()
+    logging.writeLog("DEBUG", "renderCurrentScreen called")
     state.updateState({ lastActivity = os.clock() })
     local screen = state.getState("screen")
     local subState = state.getState("subState")
+    logging.writeLog("DEBUG", "screen=" .. tostring(screen) .. " subState=" .. tostring(subState))
     if screen == 1 then renderScreen1()
     elseif screen == 2 then renderScreen2()
     elseif screen == 3 then

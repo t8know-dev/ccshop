@@ -104,7 +104,6 @@ local function handleScreen1Click(pedestalIndex, pedestalOption, side, itemId)
                 selectedCategory = CATEGORIES[catIdx].label,
                 screen = 2
             })
-            screens.renderCurrentScreen()
         end
     end
 end
@@ -150,7 +149,6 @@ local function handleScreen2Click(pedestalIndex, pedestalOption, side, itemId)
                 screen = 3,
                 subState = 'selecting'
             })
-            screens.renderCurrentScreen()
         else
         end
     elseif side == 'left' then
@@ -160,7 +158,6 @@ local function handleScreen2Click(pedestalIndex, pedestalOption, side, itemId)
             paymentBaseline = nil,
             paymentCheckCount = 0
         })
-        screens.renderCurrentScreen()
     end
 end
 
@@ -177,7 +174,6 @@ local function handleScreen3Click(pedestalIndex, pedestalOption, side, selectedC
                     selectedQty = selectedCount,
                     subState = 'confirming'
                 })
-                screens.renderCurrentScreen()
             end
         elseif side == 'left' then
             -- LMB goes back to material selection
@@ -187,7 +183,6 @@ local function handleScreen3Click(pedestalIndex, pedestalOption, side, selectedC
                 paymentBaseline = nil,
                 paymentCheckCount = 0
             })
-            screens.renderCurrentScreen()
         end
     elseif subState == 'confirming' then
         -- Payment awaiting sub-state
@@ -195,7 +190,6 @@ local function handleScreen3Click(pedestalIndex, pedestalOption, side, selectedC
             -- RMB changes quantity (back to selecting)
             if selectedCount and selectedCount ~= state.getState("selectedQty") then
                 state.updateState({ selectedQty = selectedCount })
-                screens.renderCurrentScreen()
             end
         elseif side == 'left' then
             -- LMB goes back to quantity selection, lock depositor
@@ -205,7 +199,6 @@ local function handleScreen3Click(pedestalIndex, pedestalOption, side, selectedC
                 paymentBaseline = nil,
                 paymentCheckCount = 0
             })
-            screens.renderCurrentScreen()
         end
     end
 end
