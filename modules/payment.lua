@@ -30,7 +30,8 @@ local function checkIdleTimeout()
                 subState = nil,
                 paymentPaid = false,
                 paymentCheckCount = 0,
-                paymentBaseline = nil
+                paymentBaseline = nil,
+                paymentDeadline = nil
             })
             -- Show timeout message on hint label (requires ui module)
             -- We'll need to access ui.getHintLabel(); but we don't have ui dependency.
@@ -59,7 +60,8 @@ local function checkPaymentDetection()
                 subState = nil,
                 paymentPaid = false,
                 paymentCheckCount = 0,
-                paymentBaseline = nil
+                paymentBaseline = nil,
+                paymentDeadline = nil
             })
         else
             state.updateState({ paymentCheckCount = state.getState("paymentCheckCount") + 1 })
@@ -101,7 +103,7 @@ local function checkPaymentDetection()
                 logging.writeLog("INFO", "PAYMENT DETECTED on side " .. tostring(changedSide) .. "! current=" .. tostring(currentInputs[changedSide]) .. " baseline=" .. tostring(paymentBaseline[changedSide]))
                 logging.writeLog("INFO", "All sides: " .. textutils.serialize(currentInputs))
                 peripherals.lockDepositor()  -- lock depositor
-                state.updateState({ paymentPaid = true, screen = 4 })
+                state.updateState({ paymentPaid = true, screen = 4, paymentDeadline = nil })
             else
                 -- Log only occasionally to avoid spam
                 if paymentCheckCount % 40 == 0 then

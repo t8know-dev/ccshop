@@ -6,6 +6,8 @@ RELAY_LOCK     = "redstone_relay_38"
 AE2_ADAPTER    = "ae2cc_adapter_12"
 DEPOSITOR      = "Numismatics_Depositor_8"
 RELAY_NOTE     = "redstone_relay_37"
+RELAY_NOTE_HIGH_FACE = "front"
+RELAY_NOTE_LOW_FACE  = "top"
 MONITOR        = "monitor_1012"
 
 -- Pedestal list: left→right display order; script centers options

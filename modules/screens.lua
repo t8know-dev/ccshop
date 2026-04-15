@@ -64,7 +64,7 @@ local function renderScreen2()
     if #options == 0 then
         -- No materials available, go back to screen 1
         logging.writeLog("WARN", "No materials available, returning to screen 1")
-        state.updateState({ screen = 1 })
+        state.updateState({ screen = 1, paymentDeadline = nil })
         -- Recursive call; but we need to avoid infinite recursion. Use renderCurrentScreen.
         -- We'll call renderCurrentScreen via the main loop. For now, just update state.
         return
@@ -104,7 +104,7 @@ local function renderScreen3Selecting()
     if #quantities == 0 then
         -- No quantities available (stock less than minQty) – should not happen
         logging.writeLog("WARN", "No quantities available, returning to screen 2")
-        state.updateState({ screen = 2 })
+        state.updateState({ screen = 2, paymentDeadline = nil })
         return
     end
     local options = {}
@@ -160,7 +160,7 @@ local function renderScreen3Confirming()
     if not ok then
         ui.getHintLabel():setText(MSG.error_deposit)
         os.sleep(2)
-        state.updateState({ screen = 1 })
+        state.updateState({ screen = 1, paymentDeadline = nil })
         return
     end
 
@@ -237,7 +237,7 @@ local function renderScreen4()
         ui.updateUI()
     end
     -- Play noteblock sound
-    peripherals.playNoteblockSound()
+    peripherals.playNoteblockSoundHigh()
     -- Log purchase
     local selectedCategory = state.getState("selectedCategory")
     local selectedMaterial = state.getState("selectedMaterial")
@@ -269,7 +269,8 @@ local function renderScreen4()
         paymentPaid = false,
         cancelRequested = false,
         paymentCheckCount = 0,
-        paymentBaseline = nil
+        paymentBaseline = nil,
+        paymentDeadline = nil
     })
 end
 

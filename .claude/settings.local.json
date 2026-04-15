@@ -4,7 +4,8 @@
       "WebSearch",
       "Bash(lua -p shop.lua)",
       "Bash(luac:*)",
-      "Bash(lua -l shop.lua)"
+      "Bash(lua -l shop.lua)",
+      "Bash(lua:*)"
     ]
   }
 }

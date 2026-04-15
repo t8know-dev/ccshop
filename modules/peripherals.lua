@@ -1,5 +1,6 @@
 -- modules/peripherals.lua — Peripheral management and AE2 cache
--- Exports: init(), getAE2Stock(), refreshAE2Cache(), playNoteblockSound(),
+-- Exports: init(), getAE2Stock(), refreshAE2Cache(), playNoteblockSoundHigh(),
+--          playNoteblockSoundLow(), playNoteblockSound() [deprecated],
 --          getAllRelayInputs(), debugRelayInputs(), lockDepositor(), unlockDepositor(),
 --          getPedestals(), getPedestalIndexByName(), getPedestalObjectToIndex(),
 --          getRelayLock(), getAe2Adapter(), getDepositor(), getRelayNote(), getMonitor()
@@ -130,12 +131,28 @@ local function getAE2Stock(itemName)
     return 0
 end
 
--- Helper: play noteblock sound
-local function playNoteblockSound()
-    logging.writeLog("DEBUG", "Playing noteblock sound")
-    pcall(relayNote.setOutput, "front", true)
+-- Helper: play noteblock high sound (front face) - selection confirm
+local function playNoteblockSoundHigh()
+    local highFace = RELAY_NOTE_HIGH_FACE or "front"
+    logging.writeLog("DEBUG", "Playing noteblock high sound on " .. highFace)
+    pcall(relayNote.setOutput, highFace, true)
     os.sleep(0.05)
-    pcall(relayNote.setOutput, "front", false)
+    pcall(relayNote.setOutput, highFace, false)
+end
+
+-- Helper: play noteblock low sound (top face) - go back / cancel
+local function playNoteblockSoundLow()
+    local lowFace = RELAY_NOTE_LOW_FACE or "top"
+    logging.writeLog("DEBUG", "Playing noteblock low sound on " .. lowFace)
+    pcall(relayNote.setOutput, lowFace, true)
+    os.sleep(0.05)
+    pcall(relayNote.setOutput, lowFace, false)
+end
+
+-- Legacy alias for backward compatibility (calls high sound)
+local function playNoteblockSound()
+    logging.writeLog("WARN", "playNoteblockSound() is deprecated, use playNoteblockSoundHigh/Low")
+    playNoteblockSoundHigh()
 end
 
 -- Get all relay input sides as table side->value
@@ -197,6 +214,8 @@ return {
     initPeripherals = initPeripherals,
     getAE2Stock = getAE2Stock,
     refreshAE2Cache = refreshAE2Cache,
+    playNoteblockSoundHigh = playNoteblockSoundHigh,
+    playNoteblockSoundLow = playNoteblockSoundLow,
     playNoteblockSound = playNoteblockSound,
     getAllRelayInputs = getAllRelayInputs,
     debugRelayInputs = debugRelayInputs,

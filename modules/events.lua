@@ -156,7 +156,8 @@ local function handleScreen2Click(pedestalIndex, pedestalOption, side, itemId)
         state.updateState({
             screen = 1,
             paymentBaseline = nil,
-            paymentCheckCount = 0
+            paymentCheckCount = 0,
+            paymentDeadline = nil
         })
     end
 end
@@ -172,7 +173,8 @@ local function handleScreen3Click(pedestalIndex, pedestalOption, side, selectedC
             if selectedCount then
                 state.updateState({
                     selectedQty = selectedCount,
-                    subState = 'confirming'
+                    subState = 'confirming',
+                    paymentDeadline = nil
                 })
             end
         elseif side == 'left' then
@@ -181,7 +183,8 @@ local function handleScreen3Click(pedestalIndex, pedestalOption, side, selectedC
                 screen = 2,
                 subState = nil,
                 paymentBaseline = nil,
-                paymentCheckCount = 0
+                paymentCheckCount = 0,
+                paymentDeadline = nil
             })
         end
     elseif subState == 'confirming' then
@@ -189,7 +192,7 @@ local function handleScreen3Click(pedestalIndex, pedestalOption, side, selectedC
         if side == 'right' then
             -- RMB changes quantity (back to selecting)
             if selectedCount and selectedCount ~= state.getState("selectedQty") then
-                state.updateState({ selectedQty = selectedCount })
+                state.updateState({ selectedQty = selectedCount, paymentDeadline = nil })
             end
         elseif side == 'left' then
             -- LMB goes back to quantity selection, lock depositor
@@ -197,7 +200,8 @@ local function handleScreen3Click(pedestalIndex, pedestalOption, side, selectedC
             state.updateState({
                 subState = 'selecting',
                 paymentBaseline = nil,
-                paymentCheckCount = 0
+                paymentCheckCount = 0,
+                paymentDeadline = nil
             })
         end
     end
@@ -207,7 +211,11 @@ end
 local function handlePedestalClick(event, eventData)
     local side = (event == 'pedestal_right_click') and 'right' or 'left'
     -- Play sound on any pedestal click
-    peripherals.playNoteblockSound()
+    if side == 'right' then
+        peripherals.playNoteblockSoundHigh()
+    else
+        peripherals.playNoteblockSoundLow()
+    end
     -- Determine action based on screen and mouse button
     local itemId = type(eventData[3]) == 'table' and eventData[3].name
     local itemCount = type(eventData[3]) == 'table' and eventData[3].count

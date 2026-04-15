@@ -39,7 +39,7 @@ local function createUI()
         :setBackground(colors.gray)
         :setForeground(colors.white)
         :onClick(function()
-            peripherals.playNoteblockSound()
+            peripherals.playNoteblockSoundLow()
             -- Lock depositor if on payment screen (screen 3 confirming)
             if state.getState("screen") == 3 and state.getState("subState") == "confirming" then
                 peripherals.lockDepositor()
@@ -54,7 +54,8 @@ local function createUI()
                 subState = nil,
                 cancelRequested = false,
                 paymentCheckCount = 0,
-                paymentBaseline = nil
+                paymentBaseline = nil,
+                paymentDeadline = nil
             })
             -- Trigger screen render via callback? The main loop will call renderCurrentScreen.
             -- For now, we need to call renderCurrentScreen; but we don't have access to screens module.
