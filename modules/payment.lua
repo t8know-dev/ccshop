@@ -17,7 +17,8 @@ local function checkIdleTimeout()
     local screen = state.getState("screen")
     local subState = state.getState("subState")
     if (screen == 2) or (screen == 3 and subState) then
-        if os.clock() - state.getState("lastActivity") > IDLE_TIMEOUT then
+        local lastActivity = state.getState("lastActivity")
+        if lastActivity and os.clock() - lastActivity > IDLE_TIMEOUT then
             -- Timeout: lock depositor if in confirming state, reset to screen 1
             if screen == 3 and subState == 'confirming' then
                 peripherals.lockDepositor()
@@ -50,7 +51,7 @@ local function checkPaymentDetection()
     local cancelRequested = state.getState("cancelRequested")
     if screen == 3 and subState == 'confirming' and not paymentPaid and not cancelRequested then
         local paymentDeadline = state.getState("paymentDeadline")
-        if paymentDeadline and os.clock() >= paymentDeadline then
+        if paymentDeadline and (os.clock() >= paymentDeadline) then
             logging.writeLog("INFO", "Payment timeout reached, locking depositor and returning to main screen")
             peripherals.lockDepositor()  -- lock depositor
             state.updateState({
@@ -85,7 +86,7 @@ local function checkPaymentDetection()
             -- First, check the configured payment detection side specifically (most likely)
             local paymentSide = PAYMENT_DETECTION_SIDE or "bottom"
             local paymentBaseline = state.getState("paymentBaseline")
-            if paymentBaseline[paymentSide] ~= nil and currentInputs[paymentSide] ~= nil then
+            if paymentBaseline and paymentBaseline[paymentSide] ~= nil and currentInputs[paymentSide] ~= nil then
                 if currentInputs[paymentSide] ~= paymentBaseline[paymentSide] then
                     paymentDetected = true
                     changedSide = paymentSide
@@ -93,13 +94,15 @@ local function checkPaymentDetection()
             end
             -- If payment side didn't change, check all other sides (fallback)
             if not paymentDetected then
-                for side, baselineVal in pairs(paymentBaseline) do
-                    if side ~= paymentSide then  -- already checked
-                        local currentVal = currentInputs[side]
-                        if currentVal ~= nil and currentVal ~= baselineVal then
-                            paymentDetected = true
-                            changedSide = side
-                            break
+                if paymentBaseline then
+                    for side, baselineVal in pairs(paymentBaseline) do
+                        if side ~= paymentSide then  -- already checked
+                            local currentVal = currentInputs[side]
+                            if currentVal ~= nil and currentVal ~= baselineVal then
+                                paymentDetected = true
+                                changedSide = side
+                                break
+                            end
                         end
                     end
                 end

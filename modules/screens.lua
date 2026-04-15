@@ -221,7 +221,7 @@ local function renderScreen3Confirming()
     for side, val in pairs(baselineTable) do
         logging.writeLog("INFO", "  " .. side .. " = " .. tostring(val))
     end
-    logging.writeLog("INFO", "Payment deadline: " .. state.getState("paymentDeadline") .. " (current time: " .. os.clock() .. ")")
+    logging.writeLog("INFO", "Payment deadline: " .. tostring(state.getState("paymentDeadline")) .. " (current time: " .. os.clock() .. ")")
 end
 
 -- Screen 4: Thank you
