@@ -157,7 +157,7 @@ local function checkPaymentDetection()
             else
                 -- Log only occasionally to avoid spam
                 if paymentCheckCount % 40 == 0 then
-                    logging.writeLog("DEBUG", "Payment detection check #" .. paymentCheckCount .. ", no change on any side. Baseline: " .. textutils.serialize(state.getState("paymentBaseline")) .. " Current: " .. textutils.serialize(currentInputs))
+                    logging.writeLog("DEBUG", "Payment detection check #" .. paymentCheckCount .. ", no change on any side.")
                 end
             end
         end
