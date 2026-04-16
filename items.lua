@@ -77,3 +77,40 @@ function findQuantityIndex(num)
   end
   return nil
 end
+
+-- Currency conversion
+-- 1 Spur = 1 spur
+-- 1 Bevel = 8 spurs
+-- 1 Sprocket = 16 spurs
+-- 1 Cog = 64 spurs
+-- 1 Crown = 8 cogs = 512 spurs
+-- 1 Sun = 64 cogs = 4096 spurs
+
+CURRENCY_UNITS = {
+    { name = "sun", value = 4096 },
+    { name = "crown", value = 512 },
+    { name = "cog", value = 64 },
+    { name = "sprocket", value = 16 },
+    { name = "bevel", value = 8 },
+    { name = "spur", value = 1 },
+}
+
+-- Convert spurs amount to coin string representation
+-- Example: 160 -> "2 sprockets, 2 cogs"
+--          2048 -> "4 crowns"
+function spursToCoins(spurs)
+    local result = {}
+    for _, unit in ipairs(CURRENCY_UNITS) do
+        if spurs >= unit.value then
+            local count = math.floor(spurs / unit.value)
+            table.insert(result, count .. " " .. unit.name .. (count > 1 and "s" or ""))
+            spurs = spurs % unit.value
+        end
+    end
+    -- Reverse to show smallest units first (as in example)
+    local reversed = {}
+    for i = #result, 1, -1 do
+        table.insert(reversed, result[i])
+    end
+    return table.concat(reversed, ", ")
+end
