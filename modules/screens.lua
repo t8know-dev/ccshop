@@ -159,6 +159,7 @@ local function renderScreen3Confirming()
     local ok, err = pcall(peripherals.getDepositor().setTotalPrice, price)
     if not ok then
         logging.writeLog("ERROR", "Depositor setTotalPrice failed: " .. tostring(err))
+        logging.writeLog("DEBUG", "Depositor error, resetting to main screen")
         ui.getHintLabel():setText(MSG.error_deposit)
         os.sleep(2)
         state.resetToMainScreen()
@@ -261,6 +262,7 @@ local function renderScreen4()
     logging.writeLog("INFO", "[MOCK] Dispense " .. selectedQty .. "x " .. selectedMaterial.item)
     -- Auto-return to screen 1 after CONFIRM_DELAY seconds
     os.sleep(CONFIRM_DELAY)
+    logging.writeLog("DEBUG", "Screen 4 auto-return, resetting to main screen")
     state.resetToMainScreen()
 end
 

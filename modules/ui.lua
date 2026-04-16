@@ -44,6 +44,7 @@ local function createUI()
             if state.getState("screen") == 3 and state.getState("subState") == "confirming" then
                 peripherals.lockDepositor()
             end
+            logging.writeLog("DEBUG", "Cancel button clicked, resetting to main screen")
             -- Reset to main screen
             state.resetToMainScreen()
             -- Trigger screen render via callback? The main loop will call renderCurrentScreen.

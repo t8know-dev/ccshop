@@ -60,6 +60,7 @@ payment.init(logging, state, peripherals, screens, config)
 -- ============================================================================
 state.subscribe(function(changes)
     if changes.screen ~= nil or changes.subState ~= nil or changes.selectedQty ~= nil then
+        logging.writeLog("DEBUG", "State changes: " .. textutils.serialize(changes) .. " triggering render")
         screens.renderCurrentScreen()
     end
 end)

@@ -18,6 +18,7 @@ local idleWarningLogged = false
 local function checkIdleTimeout()
     local screen = state.getState("screen")
     local subState = state.getState("subState")
+    logging.writeLog("DEBUG", "checkIdleTimeout: screen="..tostring(screen).." subState="..tostring(subState).." IDLE_TIMEOUT="..tostring(IDLE_TIMEOUT))
     if (screen == 2) or (screen == 3 and subState) then
         local lastActivity = state.getState("lastActivity")
         -- Reset warning if lastActivity changed
@@ -36,6 +37,7 @@ local function checkIdleTimeout()
                 peripherals.lockDepositor()
             end
             logging.writeLog("INFO", "Idle timeout triggered, returning to screen 1")
+            logging.writeLog("DEBUG", "checkIdleTimeout: screen="..tostring(screen).." subState="..tostring(subState).." lastActivity="..tostring(lastActivity).." os.clock()="..os.clock())
             state.resetToMainScreen()
             -- Show timeout message on hint label (requires ui module)
             -- We'll need to access ui.getHintLabel(); but we don't have ui dependency.
@@ -68,7 +70,14 @@ local function checkPaymentDetection()
         local paymentDeadline = state.getState("paymentDeadline")
         local paymentCheckCount = state.getState("paymentCheckCount") or 0
 
-        -- Log only first few checks
+        -- Log entry (first 10 checks)
+        if paymentCheckCount <= 10 then
+            logging.writeLog("DEBUG", "checkPaymentDetection ENTRY: screen=3 subState=confirming paymentPaid="..tostring(paymentPaid).." paymentDeadline="..tostring(paymentDeadline).." os.clock()="..os.clock())
+            if paymentDeadline then
+                logging.writeLog("DEBUG", "checkPaymentDetection: time remaining="..string.format("%.3f", paymentDeadline - os.clock()).." seconds")
+            end
+        end
+        -- Log only first few checks (original)
         if paymentCheckCount <= 3 then
             logging.writeLog("DEBUG", "checkPaymentDetection: screen=3 subState=confirming paymentPaid="..tostring(paymentPaid))
             logging.writeLog("DEBUG", "checkPaymentDetection: paymentDeadline="..tostring(paymentDeadline).." os.clock()="..os.clock())
@@ -79,6 +88,7 @@ local function checkPaymentDetection()
         end
         if paymentDeadline and (os.clock() >= paymentDeadline) then
             logging.writeLog("INFO", "Payment timeout reached, locking depositor and returning to main screen")
+            logging.writeLog("DEBUG", "checkPaymentDetection: paymentDeadline="..tostring(paymentDeadline).." os.clock()="..os.clock().." diff="..tostring(paymentDeadline - os.clock()))
             peripherals.lockDepositor()  -- lock depositor
             state.resetToMainScreen()
         else
@@ -101,6 +111,7 @@ local function checkPaymentDetection()
             local changedSide = nil
             -- First, check the configured payment detection side specifically (most likely)
             local paymentSide = PAYMENT_DETECTION_SIDE or "bottom"
+            logging.writeLog("DEBUG", "checkPaymentDetection: paymentSide="..tostring(paymentSide).." PAYMENT_TIMEOUT="..tostring(PAYMENT_TIMEOUT))
             local paymentBaseline = state.getState("paymentBaseline")
             if not paymentBaseline then
                 logging.writeLog("DEBUG", "paymentBaseline is nil, cannot detect payment")
