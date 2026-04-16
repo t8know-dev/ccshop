@@ -110,53 +110,33 @@ local function updateUI()
     local screen = state.getState("screen")
     local subState = state.getState("subState")
     if screen == 1 then
-        -- Discount info lines (either table or string) - show in discountLabel above hint label
+        -- Combine discount lines and hint into single multi-line text
         local discountInfo = MSG.screen1_discount_info
-        local discountLines = {}
+        local lines = {}
+
         if type(discountInfo) == "table" then
             -- Add each discount line as separate line
             for _, line in ipairs(discountInfo) do
-                table.insert(discountLines, line)
+                table.insert(lines, line)
             end
         else
             -- Already a string, treat as single line
-            table.insert(discountLines, discountInfo)
+            table.insert(lines, discountInfo)
         end
 
-        -- Calculate available height: from hintYPos to bottom of monitor, minus 1 line for hint label
-        local maxDiscountHeight = monitorHeight - hintYPos  -- total rows from hintYPos to bottom (inclusive)
-        if maxDiscountHeight < 1 then maxDiscountHeight = 1 end
-        -- Reserve 1 line for hint label (instruction)
-        maxDiscountHeight = maxDiscountHeight - 1
-        if maxDiscountHeight < 0 then maxDiscountHeight = 0 end
+        -- Add empty line separator
+        table.insert(lines, "")
+        -- Add hint line
+        table.insert(lines, MSG.screen1_hint)
 
-        -- Truncate discount lines if necessary
-        if #discountLines > maxDiscountHeight then
-            local truncated = {}
-            for i = 1, maxDiscountHeight do
-                table.insert(truncated, discountLines[i])
-            end
-            discountLines = truncated
-        end
-
-        local discountText = table.concat(discountLines, "\n")
-        local discountNumLines = #discountLines
+        local fullText = table.concat(lines, "\n")
+        local numLines = #lines
         local W = monitorWidth or 80
 
-        -- Position discount label at hintYPos
-        local discountY = hintYPos
-        discountLabel:setPosition(1, discountY)
-        discountLabel:setSize(W, discountNumLines)
-        discountLabel:setText(discountText)
-        discountLabel:setVisible(true)
-
-        -- Position hint label below discount label (or at hintYPos if no discount lines)
-        local hintY = discountY + discountNumLines
-        if discountNumLines == 0 then hintY = hintYPos end
-        hintLabel:setPosition(1, hintY)
-        hintLabel:setSize(W, 1)
-        hintLabel:setText(MSG.screen1_hint)
-
+        -- Use hintLabel to display all lines (discount info + separator + hint)
+        hintLabel:setSize(W, numLines)
+        hintLabel:setText(fullText)
+        discountLabel:setVisible(false)
         if cancelButton and cancelButton.setVisible then cancelButton:setVisible(false) end
     elseif screen == 2 then
         local W = monitorWidth or 80
