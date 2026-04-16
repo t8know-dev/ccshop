@@ -6,6 +6,7 @@ local logging, state, screens, pedestal, peripherals, config
 
 -- Local copies of mapping tables
 local pedestalIndexByName, pedestalObjectToIndex
+local PAYMENT_TIMEOUT
 
 -- Initialize module with dependencies
 local function init(loggingModule, stateModule, screensModule, pedestalModule, peripheralsModule, configModule)
@@ -17,6 +18,7 @@ local function init(loggingModule, stateModule, screensModule, pedestalModule, p
     config = configModule
     pedestalIndexByName = peripherals.getPedestalIndexByName()
     pedestalObjectToIndex = peripherals.getPedestalObjectToIndex()
+    PAYMENT_TIMEOUT = config.get("PAYMENT_TIMEOUT")
 end
 
 -- Map pedestal object/name to index
@@ -177,7 +179,7 @@ local function handleScreen3Click(pedestalIndex, pedestalOption, side, selectedC
                 state.updateState({
                     selectedQty = selectedCount,
                     subState = 'confirming',
-                    paymentDeadline = nil
+                    paymentDeadline = os.clock() + PAYMENT_TIMEOUT
                 })
             end
         elseif side == 'left' then
@@ -196,7 +198,7 @@ local function handleScreen3Click(pedestalIndex, pedestalOption, side, selectedC
         if side == 'right' then
             -- RMB changes quantity (back to selecting)
             if selectedCount and selectedCount ~= state.getState("selectedQty") then
-                state.updateState({ selectedQty = selectedCount, paymentDeadline = nil })
+                state.updateState({ selectedQty = selectedCount, paymentDeadline = os.clock() + PAYMENT_TIMEOUT })
             end
         elseif side == 'left' then
             -- LMB goes back to quantity selection, lock depositor

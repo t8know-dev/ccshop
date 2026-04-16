@@ -67,6 +67,9 @@ local function checkPaymentDetection()
 
     if screen == 3 and subState == 'confirming' and not paymentPaid then
         local paymentDeadline = state.getState("paymentDeadline")
+        if not paymentDeadline then
+            logging.writeLog("WARN", "checkPaymentDetection: paymentDeadline is nil in confirming state")
+        end
         local paymentCheckCount = state.getState("paymentCheckCount") or 0
 
         -- Log entry (first 10 checks)
@@ -87,7 +90,7 @@ local function checkPaymentDetection()
         end
         if paymentDeadline and (os.clock() >= paymentDeadline) then
             logging.writeLog("INFO", "Payment timeout reached, locking depositor and returning to main screen")
-            -- logging.writeLog("DEBUG", "checkPaymentDetection: paymentDeadline="..tostring(paymentDeadline).." os.clock()="..os.clock().." diff="..tostring(paymentDeadline - os.clock()))
+            logging.writeLog("DEBUG", "checkPaymentDetection: paymentDeadline="..tostring(paymentDeadline).." os.clock()="..os.clock().." diff="..tostring(paymentDeadline - os.clock()))
             peripherals.lockDepositor()  -- lock depositor
             state.resetToMainScreen()
         else

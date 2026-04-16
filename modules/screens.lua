@@ -212,9 +212,13 @@ local function renderScreen3Confirming()
     local baselineTable = peripherals.getAllRelayInputs()
     -- logging.writeLog("DEBUG", "Payment baseline table: " .. textutils.serialize(baselineTable))
     -- logging.writeLog("DEBUG", "renderScreen3Confirming: PAYMENT_TIMEOUT="..tostring(PAYMENT_TIMEOUT).." os.clock()="..os.clock())
+    -- Ensure paymentDeadline is set (fallback in case events.lua didn't set it)
+    if not state.getState("paymentDeadline") then
+        state.updateState({ paymentDeadline = os.clock() + PAYMENT_TIMEOUT })
+        logging.writeLog("WARN", "renderScreen3Confirming: paymentDeadline was nil, set fallback deadline")
+    end
     state.updateState({
         paymentBaseline = baselineTable,
-        paymentDeadline = os.clock() + PAYMENT_TIMEOUT,
         paymentPaid = false,
         paymentCheckCount = 0
     })
