@@ -99,7 +99,7 @@ local function checkPaymentDetection()
                 if paymentDeadline then
                     deadlineStr = string.format("%.1f", paymentDeadline - os.clock()) .. "s"
                 end
-                logging.writeLog("DEBUG", "Payment detection check #" .. paymentCheckCount .. ", " .. deadlineStr)
+                -- logging.writeLog("DEBUG", "Payment detection check #" .. paymentCheckCount .. ", " .. deadlineStr)
                 if paymentCheckCount <= 5 or paymentCheckCount % 30 == 0 then
                     peripherals.debugRelayInputs()
                 end
@@ -141,11 +141,6 @@ local function checkPaymentDetection()
                 logging.writeLog("INFO", "All sides: " .. textutils.serialize(currentInputs))
                 peripherals.lockDepositor()  -- lock depositor
                 state.updateState({ paymentPaid = true, screen = 4, paymentDeadline = nil })
-            else
-                -- Log only occasionally to avoid spam
-                if paymentCheckCount % 40 == 0 then
-                    logging.writeLog("DEBUG", "Payment detection check #" .. paymentCheckCount .. ", no change on any side.")
-                end
             end
         end
     end
