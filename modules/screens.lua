@@ -264,13 +264,11 @@ end
 -- Update screen based on state
 local function renderCurrentScreen()
     logging.writeLog("DEBUG", "renderCurrentScreen called")
-    -- Log full state for debugging
-    local fullState = state.getState()
-    logging.writeLog("DEBUG", "Full state at render start: " .. textutils.serialize(fullState))
     state.updateState({ lastActivity = os.clock() })
     local screen = state.getState("screen")
     local subState = state.getState("subState")
-    logging.writeLog("DEBUG", "screen=" .. tostring(screen) .. " subState=" .. tostring(subState))
+    local paymentDeadline = state.getState("paymentDeadline")
+    logging.writeLog("DEBUG", "screen=" .. tostring(screen) .. " subState=" .. tostring(subState) .. " paymentDeadline=" .. tostring(paymentDeadline))
     if screen == 1 then renderScreen1()
     elseif screen == 2 then renderScreen2()
     elseif screen == 3 then

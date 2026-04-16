@@ -51,7 +51,6 @@ end
 -- Check payment detection
 local checkPaymentEntryCount = 0
 local function checkPaymentDetection()
-    logging.writeLog("DEBUG", "checkPaymentDetection CALLED")
     local screen = state.getState("screen")
     local subState = state.getState("subState")
     local paymentPaid = state.getState("paymentPaid")

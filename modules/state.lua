@@ -37,34 +37,44 @@ end
 -- Update state with a table of changes
 local function updateState(changes)
     local changed = false
-    -- Log the changes being applied (if logging module is available)
+    -- Log only important state changes (to reduce log volume)
     local ok, logging = pcall(require, "modules.logging")
-    if ok and logging.writeLog then
-        logging.writeLog("DEBUG", "updateState called with changes: " .. textutils.serialize(changes))
+    local importantKeys = {
+        screen = true, subState = true, selectedCategory = true,
+        selectedMaterial = true, selectedQty = true,
+        paymentDeadline = true, paymentPaid = true, paymentBaseline = true,
+        paymentCheckCount = true, calculatedPrice = true
+    }
+
+    -- Log only if changes contain important keys
+    local hasImportantChange = false
+    for k, _ in pairs(changes) do
+        if importantKeys[k] then
+            hasImportantChange = true
+            break
+        end
     end
+
+    if ok and logging.writeLog and hasImportantChange then
+        logging.writeLog("DEBUG", "updateState called with important changes: " .. textutils.serialize(changes))
+    end
+
     for k, v in pairs(changes) do
         if state[k] ~= v then
-            if ok and logging.writeLog then
+            if ok and logging.writeLog and importantKeys[k] then
                 logging.writeLog("DEBUG", "  updating " .. k .. ": " .. tostring(state[k]) .. " -> " .. tostring(v))
             end
             state[k] = v
             changed = true
-        else
-            if ok and logging.writeLog then
-                logging.writeLog("DEBUG", "  no change for " .. k .. " (already " .. tostring(state[k]) .. ")")
-            end
         end
     end
+
     if changed then
-        if ok and logging.writeLog then
+        if ok and logging.writeLog and hasImportantChange then
             logging.writeLog("DEBUG", "State changed, notifying " .. #subscribers .. " subscribers")
         end
         for _, callback in ipairs(subscribers) do
             pcall(callback, changes)
-        end
-    else
-        if ok and logging.writeLog then
-            logging.writeLog("DEBUG", "No state changes")
         end
     end
 end
