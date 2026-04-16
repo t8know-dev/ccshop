@@ -53,7 +53,7 @@ local function createUI()
     -- Header (top bar)
     headerLabel = mainFrame:addLabel()
         :setPosition(1,1):setSize(W,1)
-        :setBackground(colors.red):setForeground(colors.white)
+        :setBackground(colors.brown):setForeground(colors.white)
         :setText(MSG.header)
     -- Hint line (below top bar with 1 line gap if enough space)
     local hintY = 3
@@ -100,29 +100,20 @@ local function updateUI()
     local screen = state.getState("screen")
     local subState = state.getState("subState")
     if screen == 1 then
-        -- Discount info lines (either table or string)
-        local lines = {}
+        -- Discount info lines (either table or string) - combine into single line
+        local discountLine
         local discountInfo = MSG.screen1_discount_info
         if type(discountInfo) == "table" then
-            for _, line in ipairs(discountInfo) do
-                table.insert(lines, line)
-            end
+            -- Combine all table lines into one line, separated by commas
+            discountLine = table.concat(discountInfo, ", ")
         else
-            -- Split by commas and trim spaces
-            for part in string.gmatch(discountInfo, "([^,]+)") do
-                table.insert(lines, (part:gsub("^%s*(.-)%s*$", "%1")))
-            end
-            -- If no commas, use the whole text as one line
-            if #lines == 0 then
-                lines = {discountInfo}
-            end
+            -- Already a string, use as is
+            discountLine = discountInfo
         end
-        -- Add empty line and pedestal instruction
-        table.insert(lines, "")
-        table.insert(lines, MSG.screen1_hint)
-        -- Combine lines with newline
+
+        -- Build lines: discount line, empty line, hint line
+        local lines = {discountLine, "", MSG.screen1_hint}
         local fullText = table.concat(lines, "\n")
-        -- Calculate required height
         local numLines = #lines
         local W = monitorWidth or 80
         hintLabel:setSize(W, numLines)
@@ -149,42 +140,41 @@ local function updateUI()
             discountLabel:setVisible(false)
             if cancelButton and cancelButton.setVisible then cancelButton:setVisible(true) end
         elseif subState == "confirming" then
-            -- Show multi-line breakdown: base price, calculation, discount, insert instruction
+            -- Show single-line breakdown: base price, calculation, discount, insert instruction
             local selectedMaterial = state.getState("selectedMaterial")
             local selectedQty = state.getState("selectedQty")
             local calculatedPrice = state.getState("calculatedPrice")
             local basePriceForQty = state.getState("basePriceForQty")
             local discountPercent = state.getState("discountPercent") or 0
 
-            -- Build lines
-            local lines = {}
+            -- Build single line parts
+            local parts = {}
 
             if selectedMaterial and calculatedPrice then
-                table.insert(lines, string.format(MSG.screen3_base_price, selectedMaterial.basePrice, selectedMaterial.minQty))
+                table.insert(parts, string.format(MSG.screen3_base_price, selectedMaterial.basePrice, selectedMaterial.minQty))
 
                 if basePriceForQty then
                     local discountAmount = basePriceForQty - calculatedPrice
-                    -- Calculation line
-                    table.insert(lines, string.format("%d × %d/%d = %d",
+                    -- Calculation part
+                    table.insert(parts, string.format("%d × %d/%d = %d",
                         selectedMaterial.basePrice, selectedQty, selectedMaterial.minQty, basePriceForQty))
-                    -- Discount line
-                    table.insert(lines, string.format("- %d%% discount (%d spurs)",
+                    -- Discount part
+                    table.insert(parts, string.format("- %d%% discount (%d spurs)",
                         discountPercent, discountAmount))
                 else
-                    table.insert(lines, string.format(MSG.screen3_price_calc, calculatedPrice))
+                    table.insert(parts, string.format(MSG.screen3_price_calc, calculatedPrice))
                 end
 
-                table.insert(lines, string.format(MSG.screen3_insert, calculatedPrice))
+                table.insert(parts, string.format(MSG.screen3_insert, calculatedPrice))
             else
                 -- Fallback if data missing
-                table.insert(lines, "Price calculation error")
-                table.insert(lines, "Please contact operator")
+                table.insert(parts, "Price calculation error")
+                table.insert(parts, "Please contact operator")
             end
 
-            local fullText = table.concat(lines, "\n")
+            local fullText = table.concat(parts, " | ")
             local W = monitorWidth or 80
-            local numLines = #lines
-            hintLabel:setSize(W, numLines)
+            hintLabel:setSize(W, 1)
             hintLabel:setText(fullText)
             if cancelButton and cancelButton.setVisible then cancelButton:setVisible(true) end
         end
