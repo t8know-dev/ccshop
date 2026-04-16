@@ -42,8 +42,7 @@ local function updateState(changes)
     local importantKeys = {
         screen = false, subState = false, selectedCategory = false,
         selectedMaterial = false, selectedQty = false,
-        paymentDeadline = true, paymentPaid = false, paymentBaseline = false,
-        paymentCheckCount = false, calculatedPrice = false
+        paymentDeadline = true, paymentPaid = false, paymentBaseline = false, calculatedPrice = false
     }
 
     -- Log only if changes contain important keys
