@@ -2,7 +2,7 @@
 -- Exports: init(), createUI(), updateUI(), getFrame(), getCancelButton(), getHintLabel()
 
 local logging, peripherals, config, state
-local frame, headerLabel, hintLabel, cancelButton
+local mainFrame, headerLabel, hintLabel, cancelButton
 
 -- Initialize module with dependencies
 local function init(loggingModule, peripheralsModule, configModule, stateModule)
@@ -21,22 +21,24 @@ local function createUI()
     end
 
     local basalt = require("basalt")
-    frame = basalt.createFrame():setTerm(monitor):setBackground(colors.black)
+    mainFrame = basalt.addMonitor()
+        :setMonitor(monitor)
+        :setBackground(colors.black)
     local width, height = monitor.getSize()
     -- Header (top bar)
-    headerLabel = frame:addLabel()
+    headerLabel = mainFrame:addLabel()
         :setPosition(1,1):setSize(width,1)
         :setBackground(colors.brown):setForeground(colors.white)
         :setText(MSG.header)
     -- Hint line (below top bar with 1 line gap if enough space)
     local hintY = 3
     if height - 2 <= 3 then hintY = 2 end  -- avoid overlap with cancel button
-    hintLabel = frame:addLabel()
+    hintLabel = mainFrame:addLabel()
         :setPosition(1, hintY):setSize(width,1)
         :setBackground(colors.black):setForeground(colors.lightGray)
     -- Cancel button (bottom-left corner)
     local btnWidth = math.min(width, #MSG.cancel_btn)
-    cancelButton = frame:addButton()
+    cancelButton = mainFrame:addButton()
         :setText(MSG.cancel_btn)
         :setPosition(1, height - 2)  -- height - 3 + 1, height is total, button height 3
         :setSize(btnWidth, 3)
@@ -98,7 +100,7 @@ local function updateUI()
 end
 
 -- Getters for UI components (for other modules)
-local function getFrame() return frame end
+local function getFrame() return mainFrame end
 local function getCancelButton() return cancelButton end
 local function getHintLabel() return hintLabel end
 
