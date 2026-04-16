@@ -27,26 +27,26 @@ local function createUI()
         logging.writeLog("ERROR", "Basalt module not initialized")
         return
     end
-    -- Create a frame for the monitor (following Basalt documentation)
-    logging.writeLog("DEBUG", "Creating monitor frame with basalt.createFrame()")
-    mainFrame = basalt.createFrame()
-    logging.writeLog("DEBUG", "basalt.createFrame() returned: " .. tostring(mainFrame))
+    -- Redirect term to monitor (cashier.lua pattern)
+    logging.writeLog("DEBUG", "Redirecting term to monitor")
+    term.redirect(monitor)
+    mainFrame = basalt.getMainFrame()
+    logging.writeLog("DEBUG", "basalt.getMainFrame() returned: " .. tostring(mainFrame))
     if not mainFrame then
-        logging.writeLog("ERROR", "basalt.createFrame() returned nil")
-        return
+        logging.writeLog("WARN", "basalt.getMainFrame() returned nil, falling back to basalt.createFrame()")
+        mainFrame = basalt.createFrame()
+        if mainFrame then
+            mainFrame:setTerm(monitor)
+            logging.writeLog("DEBUG", "Created frame with setTerm")
+        else
+            logging.writeLog("ERROR", "basalt.createFrame() also returned nil")
+            return
+        end
     end
-    -- Set the monitor as terminal for this frame
-    mainFrame:setTerm(monitor)
-    logging.writeLog("DEBUG", "Monitor term set")
     mainFrame:setBackground(colors.black)
     logging.writeLog("DEBUG", "Main frame background set")
-    -- Get monitor dimensions
-    local ok, width, height = pcall(monitor.getSize)
-    if not ok or not width then
-        logging.writeLog("ERROR", "monitor.getSize() failed: " .. tostring(width))
-        -- Fallback to default size
-        width, height = 80, 24
-    end
+    -- Get monitor dimensions via term.getSize() after redirect
+    local width, height = term.getSize()
     local W, H = width, height
     monitorWidth = W
     monitorHeight = H
@@ -57,7 +57,15 @@ local function createUI()
         :setText(MSG.header)
     -- Hint line (below top bar with 1 line gap if enough space)
     local hintY = 3
-    if H - 2 <= 3 then hintY = 2 end  -- avoid overlap with cancel button
+    -- Ensure hint line does not overlap button (button occupies rows H-3, H-2, H-1)
+    local maxHintY = H - 4  -- at least 1 line gap above button
+    if hintY > maxHintY then
+        hintY = maxHintY
+    end
+    -- Ensure hint line is at least row 2 (below header)
+    if hintY < 2 then
+        hintY = 2
+    end
     hintLabel = mainFrame:addLabel()
         :setPosition(1, hintY):setSize(W,1)
         :setBackground(colors.black):setForeground(colors.lightGray)
@@ -66,13 +74,14 @@ local function createUI()
         :setPosition(1, hintY + 1):setSize(W,1)
         :setBackground(colors.black):setForeground(colors.lightGray)
         :setVisible(false)
-    -- Cancel button (bottom-left corner)
-    local btnWidth = math.min(W, #MSG.cancel_btn)
+    -- Cancel button (bottom-left corner) styled like cashier example
+    local btnWidth = math.max(1, math.min(16, W - 4))  -- Fixed width 16, but ensure fits monitor, minimum 1
+    local btnText = " " .. MSG.cancel_btn .. " "  -- Padded text
     cancelButton = mainFrame:addButton()
-        :setText(MSG.cancel_btn)
-        :setPosition(1, H - 2)  -- H - 3 + 1, H is total, button height 3
+        :setText(btnText)
+        :setPosition(2, H - 3)  -- Bottom-left with margin
         :setSize(btnWidth, 3)
-        :setBackground(colors.gray)
+        :setBackground(colors.red)
         :setForeground(colors.white)
         :onClick(function()
             peripherals.playNoteblockSoundLow()
