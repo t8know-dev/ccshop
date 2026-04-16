@@ -40,10 +40,10 @@ local function updateState(changes)
     -- Log only important state changes (to reduce log volume)
     local ok, logging = pcall(require, "modules.logging")
     local importantKeys = {
-        screen = true, subState = true, selectedCategory = true,
-        selectedMaterial = true, selectedQty = true,
-        paymentDeadline = true, paymentPaid = true, paymentBaseline = true,
-        paymentCheckCount = true, calculatedPrice = true
+        screen = false, subState = false, selectedCategory = false,
+        selectedMaterial = false, selectedQty = false,
+        paymentDeadline = true, paymentPaid = false, paymentBaseline = false,
+        paymentCheckCount = false, calculatedPrice = false
     }
 
     -- Log only if changes contain important keys
