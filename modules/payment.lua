@@ -99,7 +99,7 @@ local function checkPaymentDetection()
                 if paymentDeadline then
                     deadlineStr = string.format("%.1f", paymentDeadline - os.clock()) .. "s"
                 end
-                -- logging.writeLog("DEBUG", "Payment detection check #" .. paymentCheckCount .. ", " .. deadlineStr)
+                 -- logging.writeLog("DEBUG", "Payment detection check #" .. paymentCheckCount .. ", " .. deadlineStr)
                 if paymentCheckCount <= 5 or paymentCheckCount % 30 == 0 then
                     peripherals.debugRelayInputs()
                 end
