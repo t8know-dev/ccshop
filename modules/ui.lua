@@ -20,27 +20,28 @@ local function createUI()
         return
     end
 
+    -- Redirect term to monitor (Basalt will use the redirected term)
+    term.redirect(monitor)
     local basalt = require("basalt")
-    mainFrame = basalt.addMonitor()
-        :setMonitor(monitor)
-        :setBackground(colors.black)
-    local width, height = monitor.getSize()
+    mainFrame = basalt.getMainFrame()
+    mainFrame:setBackground(colors.black)
+    local W, H = term.getSize()
     -- Header (top bar)
     headerLabel = mainFrame:addLabel()
-        :setPosition(1,1):setSize(width,1)
+        :setPosition(1,1):setSize(W,1)
         :setBackground(colors.brown):setForeground(colors.white)
         :setText(MSG.header)
     -- Hint line (below top bar with 1 line gap if enough space)
     local hintY = 3
-    if height - 2 <= 3 then hintY = 2 end  -- avoid overlap with cancel button
+    if H - 2 <= 3 then hintY = 2 end  -- avoid overlap with cancel button
     hintLabel = mainFrame:addLabel()
-        :setPosition(1, hintY):setSize(width,1)
+        :setPosition(1, hintY):setSize(W,1)
         :setBackground(colors.black):setForeground(colors.lightGray)
     -- Cancel button (bottom-left corner)
-    local btnWidth = math.min(width, #MSG.cancel_btn)
+    local btnWidth = math.min(W, #MSG.cancel_btn)
     cancelButton = mainFrame:addButton()
         :setText(MSG.cancel_btn)
-        :setPosition(1, height - 2)  -- height - 3 + 1, height is total, button height 3
+        :setPosition(1, H - 2)  -- H - 3 + 1, H is total, button height 3
         :setSize(btnWidth, 3)
         :setBackground(colors.gray)
         :setForeground(colors.white)
