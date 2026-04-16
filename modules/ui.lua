@@ -110,55 +110,47 @@ local function updateUI()
     local screen = state.getState("screen")
     local subState = state.getState("subState")
     if screen == 1 then
-        -- Discount info lines (either table or string) - keep as multiple lines
+        -- Discount info lines (either table or string) - show in discountLabel
         local discountInfo = MSG.screen1_discount_info
-        local lines = {}
+        local discountLines = {}
         if type(discountInfo) == "table" then
             -- Add each discount line as separate line
             for _, line in ipairs(discountInfo) do
-                table.insert(lines, line)
+                table.insert(discountLines, line)
             end
         else
             -- Already a string, treat as single line
-            table.insert(lines, discountInfo)
-        end
-        -- Add empty line separator
-        table.insert(lines, "")
-        -- Add hint line
-        table.insert(lines, MSG.screen1_hint)
-
-        -- Ensure hint label doesn't overlap cancel button
-        local availableHeight = monitorHeight - 4 - hintYPos + 1  -- rows from hintYPos to row above button
-        if availableHeight < 1 then availableHeight = 1 end
-        if #lines > availableHeight then
-            -- Need to truncate lines, keep hint line at the bottom
-            local hintLine = lines[#lines]
-            local discountLines = {}
-            if type(discountInfo) == "table" then
-                discountLines = discountInfo
-            else
-                discountLines = {discountInfo}
-            end
-            -- Determine how many discount lines we can keep
-            local maxDiscountLines = availableHeight - 1  -- reserve 1 line for hint
-            local keepDiscountLines = math.min(#discountLines, maxDiscountLines)
-            lines = {}
-            for i = 1, keepDiscountLines do
-                table.insert(lines, discountLines[i])
-            end
-            -- Add separator if we have room (at least 2 lines total: discount + separator + hint)
-            if availableHeight >= #lines + 2 then
-                table.insert(lines, "")
-            end
-            table.insert(lines, hintLine)
+            table.insert(discountLines, discountInfo)
         end
 
-        local fullText = table.concat(lines, "\n")
-        local numLines = #lines
+        -- Calculate available height for discount label (above cancel button)
+        local discountY = hintYPos + 1  -- discount label starts one line below hint label
+        local maxDiscountHeight = monitorHeight - 4 - discountY + 1  -- rows from discountY to row above button
+        if maxDiscountHeight < 1 then maxDiscountHeight = 1 end
+
+        -- Truncate discount lines if necessary
+        if #discountLines > maxDiscountHeight then
+            local truncated = {}
+            for i = 1, maxDiscountHeight do
+                table.insert(truncated, discountLines[i])
+            end
+            discountLines = truncated
+        end
+
+        local discountText = table.concat(discountLines, "\n")
+        local discountNumLines = #discountLines
         local W = monitorWidth or 80
-        hintLabel:setSize(W, numLines)
-        hintLabel:setText(fullText)
-        discountLabel:setVisible(false)
+
+        -- Set up hint label (just the instruction)
+        hintLabel:setSize(W, 1)
+        hintLabel:setText(MSG.screen1_hint)
+
+        -- Set up discount label
+        discountLabel:setPosition(1, discountY)
+        discountLabel:setSize(W, discountNumLines)
+        discountLabel:setText(discountText)
+        discountLabel:setVisible(true)
+
         if cancelButton and cancelButton.setVisible then cancelButton:setVisible(false) end
     elseif screen == 2 then
         local W = monitorWidth or 80
@@ -216,12 +208,14 @@ local function updateUI()
             local W = monitorWidth or 80
             hintLabel:setSize(W, 1)
             hintLabel:setText(fullText)
+            discountLabel:setVisible(false)
             if cancelButton and cancelButton.setVisible then cancelButton:setVisible(true) end
         end
     elseif screen == 4 then
         local W = monitorWidth or 80
         hintLabel:setSize(W, 1)
         hintLabel:setText(MSG.screen4_thanks)
+        discountLabel:setVisible(false)
         if cancelButton and cancelButton.setVisible then cancelButton:setVisible(false) end
     end
 end
