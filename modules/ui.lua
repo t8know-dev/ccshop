@@ -3,7 +3,7 @@
 
 local logging, peripherals, config, state, basalt
 local mainFrame, headerLabel, hintLabel, cancelButton, discountLabel
-local monitorWidth, monitorHeight
+local monitorWidth, monitorHeight, hintYPos
 
 -- Initialize module with dependencies
 local function init(loggingModule, peripheralsModule, configModule, stateModule, basaltModule)
@@ -66,6 +66,7 @@ local function createUI()
     if hintY < 2 then
         hintY = 2
     end
+    hintYPos = hintY  -- store for later use in updateUI
     hintLabel = mainFrame:addLabel()
         :setPosition(1, hintY):setSize(W,1)
         :setBackground(colors.black):setForeground(colors.lightGray)
@@ -75,7 +76,7 @@ local function createUI()
         :setBackground(colors.black):setForeground(colors.lightGray)
         :setVisible(false)
     -- Cancel button (bottom-left corner) styled like cashier example
-    local btnWidth = math.max(1, math.min(16, W - 4))  -- Fixed width 16, but ensure fits monitor, minimum 1
+    local btnWidth = math.max(1, math.min(14, W - 4))  -- Fixed width 16, but ensure fits monitor, minimum 1
     local btnText = " " .. MSG.cancel_btn .. " "  -- Padded text
     cancelButton = mainFrame:addButton()
         :setText(btnText)
@@ -109,19 +110,49 @@ local function updateUI()
     local screen = state.getState("screen")
     local subState = state.getState("subState")
     if screen == 1 then
-        -- Discount info lines (either table or string) - combine into single line
-        local discountLine
+        -- Discount info lines (either table or string) - keep as multiple lines
         local discountInfo = MSG.screen1_discount_info
+        local lines = {}
         if type(discountInfo) == "table" then
-            -- Combine all table lines into one line, separated by commas
-            discountLine = table.concat(discountInfo, ", ")
+            -- Add each discount line as separate line
+            for _, line in ipairs(discountInfo) do
+                table.insert(lines, line)
+            end
         else
-            -- Already a string, use as is
-            discountLine = discountInfo
+            -- Already a string, treat as single line
+            table.insert(lines, discountInfo)
+        end
+        -- Add empty line separator
+        table.insert(lines, "")
+        -- Add hint line
+        table.insert(lines, MSG.screen1_hint)
+
+        -- Ensure hint label doesn't overlap cancel button
+        local availableHeight = monitorHeight - 4 - hintYPos + 1  -- rows from hintYPos to row above button
+        if availableHeight < 1 then availableHeight = 1 end
+        if #lines > availableHeight then
+            -- Need to truncate lines, keep hint line at the bottom
+            local hintLine = lines[#lines]
+            local discountLines = {}
+            if type(discountInfo) == "table" then
+                discountLines = discountInfo
+            else
+                discountLines = {discountInfo}
+            end
+            -- Determine how many discount lines we can keep
+            local maxDiscountLines = availableHeight - 1  -- reserve 1 line for hint
+            local keepDiscountLines = math.min(#discountLines, maxDiscountLines)
+            lines = {}
+            for i = 1, keepDiscountLines do
+                table.insert(lines, discountLines[i])
+            end
+            -- Add separator if we have room (at least 2 lines total: discount + separator + hint)
+            if availableHeight >= #lines + 2 then
+                table.insert(lines, "")
+            end
+            table.insert(lines, hintLine)
         end
 
-        -- Build lines: discount line, empty line, hint line
-        local lines = {discountLine, "", MSG.screen1_hint}
         local fullText = table.concat(lines, "\n")
         local numLines = #lines
         local W = monitorWidth or 80
