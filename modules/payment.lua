@@ -62,7 +62,7 @@ local function checkPaymentDetection()
     -- Diagnostic logging for first 5 entries when in screen 3 confirming
     if screen == 3 and subState == 'confirming' and checkPaymentEntryCount < 5 then
         checkPaymentEntryCount = checkPaymentEntryCount + 1
-        logging.writeLog("DEBUG", "checkPaymentDetection diag: screen=3 subState=confirming paymentPaid="..tostring(paymentPaid).." entryCount="..checkPaymentEntryCount)
+        -- logging.writeLog("DEBUG", "checkPaymentDetection diag: screen=3 subState=confirming paymentPaid="..tostring(paymentPaid).." entryCount="..checkPaymentEntryCount)
     end
 
     if screen == 3 and subState == 'confirming' and not paymentPaid then
@@ -71,23 +71,23 @@ local function checkPaymentDetection()
 
         -- Log entry (first 10 checks)
         if paymentCheckCount <= 3 then
-            logging.writeLog("DEBUG", "checkPaymentDetection ENTRY: screen=3 subState=confirming paymentPaid="..tostring(paymentPaid).." paymentDeadline="..tostring(paymentDeadline).." os.clock()="..os.clock())
+            -- logging.writeLog("DEBUG", "checkPaymentDetection ENTRY: screen=3 subState=confirming paymentPaid="..tostring(paymentPaid).." paymentDeadline="..tostring(paymentDeadline).." os.clock()="..os.clock())
             if paymentDeadline then
-                logging.writeLog("DEBUG", "checkPaymentDetection: time remaining="..string.format("%.3f", paymentDeadline - os.clock()).." seconds")
+                -- logging.writeLog("DEBUG", "checkPaymentDetection: time remaining="..string.format("%.3f", paymentDeadline - os.clock()).." seconds")
             end
         end
         -- Log only first few checks (original)
         if paymentCheckCount <= 3 then
-            logging.writeLog("DEBUG", "checkPaymentDetection: screen=3 subState=confirming paymentPaid="..tostring(paymentPaid))
-            logging.writeLog("DEBUG", "checkPaymentDetection: paymentDeadline="..tostring(paymentDeadline).." os.clock()="..os.clock())
+            -- logging.writeLog("DEBUG", "checkPaymentDetection: screen=3 subState=confirming paymentPaid="..tostring(paymentPaid))
+            -- logging.writeLog("DEBUG", "checkPaymentDetection: paymentDeadline="..tostring(paymentDeadline).." os.clock()="..os.clock())
             if paymentDeadline then
                 local diff = paymentDeadline - os.clock()
-                logging.writeLog("DEBUG", "checkPaymentDetection: time remaining="..string.format("%.3f", diff).." seconds")
+                -- logging.writeLog("DEBUG", "checkPaymentDetection: time remaining="..string.format("%.3f", diff).." seconds")
             end
         end
         if paymentDeadline and (os.clock() >= paymentDeadline) then
             logging.writeLog("INFO", "Payment timeout reached, locking depositor and returning to main screen")
-            logging.writeLog("DEBUG", "checkPaymentDetection: paymentDeadline="..tostring(paymentDeadline).." os.clock()="..os.clock().." diff="..tostring(paymentDeadline - os.clock()))
+            -- logging.writeLog("DEBUG", "checkPaymentDetection: paymentDeadline="..tostring(paymentDeadline).." os.clock()="..os.clock().." diff="..tostring(paymentDeadline - os.clock()))
             peripherals.lockDepositor()  -- lock depositor
             state.resetToMainScreen()
         else
@@ -113,7 +113,7 @@ local function checkPaymentDetection()
             -- logging.writeLog("DEBUG", "checkPaymentDetection: paymentSide="..tostring(paymentSide).." PAYMENT_TIMEOUT="..tostring(PAYMENT_TIMEOUT))
             local paymentBaseline = state.getState("paymentBaseline")
             if not paymentBaseline then
-                logging.writeLog("DEBUG", "paymentBaseline is nil, cannot detect payment")
+                -- logging.writeLog("DEBUG", "paymentBaseline is nil, cannot detect payment")
             end
             if paymentBaseline and paymentBaseline[paymentSide] ~= nil and currentInputs[paymentSide] ~= nil then
                 if currentInputs[paymentSide] ~= paymentBaseline[paymentSide] then
@@ -165,7 +165,7 @@ local function paymentMonitorLoop()
                 local screen = state.getState("screen")
                 local subState = state.getState("subState")
                 if screen == 3 and subState == 'confirming' then
-                    logging.writeLog("DEBUG", "paymentMonitorLoop alive, iteration="..iterationCount.." screen=3 confirming")
+                    -- debug logging disabled
                 end
             end
         end)

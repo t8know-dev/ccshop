@@ -211,7 +211,7 @@ local function renderScreen3Confirming()
     -- Get baseline for all sides
     local baselineTable = peripherals.getAllRelayInputs()
     -- logging.writeLog("DEBUG", "Payment baseline table: " .. textutils.serialize(baselineTable))
-    logging.writeLog("DEBUG", "renderScreen3Confirming: PAYMENT_TIMEOUT="..tostring(PAYMENT_TIMEOUT).." os.clock()="..os.clock())
+    -- logging.writeLog("DEBUG", "renderScreen3Confirming: PAYMENT_TIMEOUT="..tostring(PAYMENT_TIMEOUT).." os.clock()="..os.clock())
     state.updateState({
         paymentBaseline = baselineTable,
         paymentDeadline = os.clock() + PAYMENT_TIMEOUT,
@@ -267,8 +267,8 @@ local function renderCurrentScreen()
     state.updateState({ lastActivity = os.clock() })
     local screen = state.getState("screen")
     local subState = state.getState("subState")
-    local paymentDeadline = state.getState("paymentDeadline")
-    logging.writeLog("DEBUG", "screen=" .. tostring(screen) .. " subState=" .. tostring(subState) .. " paymentDeadline=" .. tostring(paymentDeadline))
+    -- local paymentDeadline = state.getState("paymentDeadline")
+    -- logging.writeLog("DEBUG", "screen=" .. tostring(screen) .. " subState=" .. tostring(subState) .. " paymentDeadline=" .. tostring(paymentDeadline))
     if screen == 1 then renderScreen1()
     elseif screen == 2 then renderScreen2()
     elseif screen == 3 then

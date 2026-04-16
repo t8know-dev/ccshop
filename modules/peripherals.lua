@@ -186,7 +186,7 @@ local function debugRelayInputs()
             table.insert(results, side .. "=error")
         end
     end
-    logging.writeLog("DEBUG", "Relay inputs: " .. table.concat(results, ", "))
+    -- logging.writeLog("DEBUG", "Relay inputs: " .. table.concat(results, ", "))
 end
 
 -- Lock depositor (set bottom output true)
