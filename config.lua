@@ -42,7 +42,14 @@ PARALLEL_RENDERING = true
 MSG = {
   header           = "ccshop",
   screen1_hint     = "Right-click a pedestal to select a category",
-  screen1_discount_info = "Bulk discounts: 2% at 1 tier, 5% at 2, 10% at 3, 15% at 4, 20% at 5+",
+  screen1_discount_info = {
+    "Bulk discounts:",
+    "2% at 1 tier",
+    "5% at 2",
+    "10% at 3",
+    "15% at 4",
+    "20% at 5+"
+  },
   screen2_hint     = "RMB: select   LMB: go back",
   screen3_hint_select  = "RMB: select quantity   LMB: go back",
   screen3_base_price   = "Base price: %d spurs for %d units",
