@@ -37,15 +37,34 @@ end
 -- Update state with a table of changes
 local function updateState(changes)
     local changed = false
+    -- Log the changes being applied (if logging module is available)
+    local ok, logging = pcall(require, "modules.logging")
+    if ok and logging.writeLog then
+        logging.writeLog("DEBUG", "updateState called with changes: " .. textutils.serialize(changes))
+    end
     for k, v in pairs(changes) do
         if state[k] ~= v then
+            if ok and logging.writeLog then
+                logging.writeLog("DEBUG", "  updating " .. k .. ": " .. tostring(state[k]) .. " -> " .. tostring(v))
+            end
             state[k] = v
             changed = true
+        else
+            if ok and logging.writeLog then
+                logging.writeLog("DEBUG", "  no change for " .. k .. " (already " .. tostring(state[k]) .. ")")
+            end
         end
     end
     if changed then
+        if ok and logging.writeLog then
+            logging.writeLog("DEBUG", "State changed, notifying " .. #subscribers .. " subscribers")
+        end
         for _, callback in ipairs(subscribers) do
             pcall(callback, changes)
+        end
+    else
+        if ok and logging.writeLog then
+            logging.writeLog("DEBUG", "No state changes")
         end
     end
 end
@@ -74,6 +93,10 @@ end
 
 -- Reset to main screen (preserves lastActivity, currentOptions, etc.)
 local function resetToMainScreen()
+    local ok, logging = pcall(require, "modules.logging")
+    if ok and logging.writeLog then
+        logging.writeLog("DEBUG", "resetToMainScreen called")
+    end
     updateState({
         screen = 1,
         selectedCategory = nil,

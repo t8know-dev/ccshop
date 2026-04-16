@@ -218,12 +218,7 @@ local function renderScreen3Confirming()
         paymentPaid = false,
         paymentCheckCount = 0
     })
-
-    -- Log baseline for all sides
-    logging.writeLog("INFO", "Payment detection baseline established:")
-    for side, val in pairs(baselineTable) do
-        logging.writeLog("INFO", "  " .. side .. " = " .. tostring(val))
-    end
+    
     logging.writeLog("INFO", "Payment deadline: " .. tostring(state.getState("paymentDeadline")) .. " (current time: " .. os.clock() .. ")")
 end
 
@@ -269,6 +264,9 @@ end
 -- Update screen based on state
 local function renderCurrentScreen()
     logging.writeLog("DEBUG", "renderCurrentScreen called")
+    -- Log full state for debugging
+    local fullState = state.getState()
+    logging.writeLog("DEBUG", "Full state at render start: " .. textutils.serialize(fullState))
     state.updateState({ lastActivity = os.clock() })
     local screen = state.getState("screen")
     local subState = state.getState("subState")
