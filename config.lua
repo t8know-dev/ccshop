@@ -40,7 +40,7 @@ PARALLEL_RENDERING = true
 
 -- Messages (all in English, easy to edit)
 MSG = {
-  header           = "* SHOP *",
+  header           = "ccshop",
   screen1_hint     = "Right-click a pedestal to select a category",
   screen2_hint     = "RMB: select   LMB: go back",
   screen3_hint_select  = "RMB: select quantity   LMB: go back",
