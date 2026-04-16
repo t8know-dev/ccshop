@@ -5,7 +5,10 @@
       "Bash(lua -p shop.lua)",
       "Bash(luac:*)",
       "Bash(lua -l shop.lua)",
-      "Bash(lua:*)"
+      "Bash(lua:*)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Bash(done)"
     ]
   }
 }

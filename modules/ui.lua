@@ -1,31 +1,55 @@
 -- modules/ui.lua — Basalt UI creation and updates
 -- Exports: init(), createUI(), updateUI(), getFrame(), getCancelButton(), getHintLabel()
 
-local logging, peripherals, config, state
-local mainFrame, headerLabel, hintLabel, cancelButton
+local logging, peripherals, config, state, basalt
+local mainFrame, headerLabel, hintLabel, cancelButton, discountLabel
+local monitorWidth, monitorHeight
 
 -- Initialize module with dependencies
-local function init(loggingModule, peripheralsModule, configModule, stateModule)
+local function init(loggingModule, peripheralsModule, configModule, stateModule, basaltModule)
     logging = loggingModule
     peripherals = peripheralsModule
     config = configModule
     state = stateModule
+    basalt = basaltModule
 end
 
 -- Create UI frame
 local function createUI()
+    logging.writeLog("DEBUG", "UI createUI called")
     local monitor = peripherals.getMonitor()
     if not monitor then
         logging.writeLog("ERROR", "Monitor not available for UI creation")
         return
     end
-
-    -- Redirect term to monitor (Basalt will use the redirected term)
-    term.redirect(monitor)
-    local basalt = require("basalt")
-    mainFrame = basalt.getMainFrame()
+    logging.writeLog("DEBUG", "Monitor found, using Basalt")
+    if not basalt then
+        logging.writeLog("ERROR", "Basalt module not initialized")
+        return
+    end
+    -- Create a frame for the monitor (following Basalt documentation)
+    logging.writeLog("DEBUG", "Creating monitor frame with basalt.createFrame()")
+    mainFrame = basalt.createFrame()
+    logging.writeLog("DEBUG", "basalt.createFrame() returned: " .. tostring(mainFrame))
+    if not mainFrame then
+        logging.writeLog("ERROR", "basalt.createFrame() returned nil")
+        return
+    end
+    -- Set the monitor as terminal for this frame
+    mainFrame:setTerm(monitor)
+    logging.writeLog("DEBUG", "Monitor term set")
     mainFrame:setBackground(colors.black)
-    local W, H = term.getSize()
+    logging.writeLog("DEBUG", "Main frame background set")
+    -- Get monitor dimensions
+    local ok, width, height = pcall(monitor.getSize)
+    if not ok or not width then
+        logging.writeLog("ERROR", "monitor.getSize() failed: " .. tostring(width))
+        -- Fallback to default size
+        width, height = 80, 24
+    end
+    local W, H = width, height
+    monitorWidth = W
+    monitorHeight = H
     -- Header (top bar)
     headerLabel = mainFrame:addLabel()
         :setPosition(1,1):setSize(W,1)
@@ -37,6 +61,11 @@ local function createUI()
     hintLabel = mainFrame:addLabel()
         :setPosition(1, hintY):setSize(W,1)
         :setBackground(colors.black):setForeground(colors.lightGray)
+    -- Discount info line (below hint line, only shown on screen 1)
+    discountLabel = mainFrame:addLabel()
+        :setPosition(1, hintY + 1):setSize(W,1)
+        :setBackground(colors.black):setForeground(colors.lightGray)
+        :setVisible(false)
     -- Cancel button (bottom-left corner)
     local btnWidth = math.min(W, #MSG.cancel_btn)
     cancelButton = mainFrame:addButton()
@@ -72,9 +101,12 @@ local function updateUI()
     local subState = state.getState("subState")
     if screen == 1 then
         hintLabel:setText(MSG.screen1_hint)
+        discountLabel:setText(MSG.screen1_discount_info)
+        discountLabel:setVisible(true)
         if cancelButton and cancelButton.setVisible then cancelButton:setVisible(false) end
     elseif screen == 2 then
         hintLabel:setText(MSG.screen2_hint)
+        discountLabel:setVisible(false)
         if cancelButton and cancelButton.setVisible then cancelButton:setVisible(true) end
     elseif screen == 3 then
         if subState == "selecting" then
@@ -82,16 +114,44 @@ local function updateUI()
             local basePriceStr = ""
             local selectedMaterial = state.getState("selectedMaterial")
             if selectedMaterial then
-                basePriceStr = string.format(MSG.screen3_base_price, selectedMaterial.basePrice, tostring(selectedMaterial.minQty)) .. " | "
+                basePriceStr = string.format(MSG.screen3_base_price, selectedMaterial.basePrice, selectedMaterial.minQty) .. " | "
             end
             hintLabel:setText(basePriceStr .. MSG.screen3_hint_select)
+            discountLabel:setVisible(false)
             if cancelButton and cancelButton.setVisible then cancelButton:setVisible(true) end
         elseif subState == "confirming" then
-            -- Show price and insert instruction
+            -- Show three-line breakdown: base price, calculation, insert instruction
+            local selectedMaterial = state.getState("selectedMaterial")
+            local selectedQty = state.getState("selectedQty")
             local calculatedPrice = state.getState("calculatedPrice")
-            local hint = string.format(MSG.screen3_price_calc, calculatedPrice) .. " - " ..
-                        string.format(MSG.screen3_insert, calculatedPrice)
-            hintLabel:setText(hint)
+            local basePriceForQty = state.getState("basePriceForQty")
+            local discountPercent = state.getState("discountPercent") or 0
+
+            -- Build three lines
+            local line1 = ""
+            local line2 = ""
+            local line3 = ""
+
+            if selectedMaterial and calculatedPrice then
+                line1 = string.format(MSG.screen3_base_price, selectedMaterial.basePrice, selectedMaterial.minQty)
+
+                if basePriceForQty then
+                    local discountAmount = basePriceForQty - calculatedPrice
+                    line2 = string.format("%d × %d/%d = %d | -%d%% = %d",
+                        selectedMaterial.basePrice, selectedQty, selectedMaterial.minQty,
+                        basePriceForQty, discountPercent, discountAmount)
+                else
+                    line2 = string.format(MSG.screen3_price_calc, calculatedPrice)
+                end
+
+                line3 = string.format(MSG.screen3_insert, calculatedPrice)
+            else
+                -- Fallback if data missing
+                line1 = "Price calculation error"
+                line3 = "Please contact operator"
+            end
+
+            hintLabel:setText(line1 .. "\n" .. line2 .. "\n" .. line3)
             if cancelButton and cancelButton.setVisible then cancelButton:setVisible(true) end
         end
     elseif screen == 4 then

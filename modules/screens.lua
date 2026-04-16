@@ -150,13 +150,20 @@ local function renderScreen3Confirming()
     -- Lock depositor first (in case we're changing quantity)
     peripherals.lockDepositor()
 
-    -- Calculate price
-    local price = math.floor(selectedMaterial.basePrice * (selectedQty / selectedMaterial.minQty))
-    state.updateState({ calculatedPrice = price })
-    logging.writeLog("INFO", "Price calculated: " .. price .. " spurs for quantity " .. selectedQty)
+    -- Calculate price with bulk discount
+    local finalPrice, basePriceForQty, discountLevel, discountPercent =
+        calculatePriceWithDiscount(selectedMaterial.basePrice, selectedMaterial.minQty, selectedQty)
+    state.updateState({
+        calculatedPrice = finalPrice,
+        discountLevel = discountLevel,
+        discountPercent = discountPercent,
+        basePriceForQty = basePriceForQty
+    })
+    logging.writeLog("INFO", "Price calculated: " .. finalPrice .. " spurs for quantity " .. selectedQty ..
+                     " (base: " .. basePriceForQty .. ", discount: " .. discountPercent .. "%, level: " .. discountLevel .. ")")
 
     -- Set depositor price
-    local ok, err = pcall(peripherals.getDepositor().setTotalPrice, price)
+    local ok, err = pcall(peripherals.getDepositor().setTotalPrice, finalPrice)
     if not ok then
         logging.writeLog("ERROR", "Depositor setTotalPrice failed: " .. tostring(err))
         logging.writeLog("DEBUG", "Depositor error, resetting to main screen")

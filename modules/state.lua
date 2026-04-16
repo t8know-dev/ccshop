@@ -8,6 +8,9 @@ local state = {
     selectedMaterial = nil,
     selectedQty = nil,
     calculatedPrice = nil,    -- price for selected quantity
+    discountLevel = nil,      -- bulk discount level (0-5+)
+    discountPercent = nil,    -- discount percentage (0-20)
+    basePriceForQty = nil,    -- price before discount (for display)
     lastActivity = os.clock(),
     currentOptions = {},      -- pedestal index -> option table (item, label, count)
     currentPedestalIndices = {}, -- which pedestal indices are currently used
@@ -42,7 +45,8 @@ local function updateState(changes)
     local importantKeys = {
         screen = false, subState = false, selectedCategory = false,
         selectedMaterial = false, selectedQty = false,
-        paymentDeadline = true, paymentPaid = false, paymentBaseline = false, calculatedPrice = false
+        paymentDeadline = true, paymentPaid = false, paymentBaseline = false, calculatedPrice = false,
+        discountLevel = false, discountPercent = false, basePriceForQty = false
     }
 
     -- Log only if changes contain important keys
@@ -87,6 +91,9 @@ local function resetState()
         selectedMaterial = nil,
         selectedQty = nil,
         calculatedPrice = nil,
+        discountLevel = nil,
+        discountPercent = nil,
+        basePriceForQty = nil,
         lastActivity = os.clock(),
         currentOptions = {},
         currentPedestalIndices = {},
@@ -113,6 +120,9 @@ local function resetToMainScreen()
         selectedQty = nil,
         subState = nil,
         calculatedPrice = nil,
+        discountLevel = nil,
+        discountPercent = nil,
+        basePriceForQty = nil,
         availableQuantities = nil,
         paymentPaid = false,
         paymentCheckCount = 0,

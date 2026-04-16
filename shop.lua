@@ -43,8 +43,8 @@ peripherals.initPeripherals()
 -- Initialize pedestal (depends on peripherals, logging, config, state)
 pedestal.init(logging, peripherals, config, state)
 
--- Initialize UI (depends on peripherals, logging, config, state)
-ui.init(logging, peripherals, config, state)
+-- Initialize UI (depends on peripherals, logging, config, state, basalt)
+ui.init(logging, peripherals, config, state, basalt)
 
 -- Initialize screens (depends on pedestal, ui, peripherals, config, state, db)
 screens.init(logging, pedestal, ui, peripherals, config, state, db)
@@ -74,10 +74,14 @@ local ok, err = pcall(function()
     config.validateAll()
 
     -- Create Basalt UI
+    logging.writeLog("DEBUG", "Calling ui.createUI()")
     ui.createUI()
+    logging.writeLog("DEBUG", "ui.createUI() completed")
 
     -- Render initial screen (screen 1)
+    logging.writeLog("DEBUG", "Calling screens.renderCurrentScreen()")
     screens.renderCurrentScreen()
+    logging.writeLog("DEBUG", "screens.renderCurrentScreen() completed")
 
     -- Run main loops in parallel
     parallel.waitForAny(
