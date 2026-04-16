@@ -111,7 +111,7 @@ local function checkPaymentDetection()
             local changedSide = nil
             -- First, check the configured payment detection side specifically (most likely)
             local paymentSide = PAYMENT_DETECTION_SIDE or "bottom"
-            logging.writeLog("DEBUG", "checkPaymentDetection: paymentSide="..tostring(paymentSide).." PAYMENT_TIMEOUT="..tostring(PAYMENT_TIMEOUT))
+            -- logging.writeLog("DEBUG", "checkPaymentDetection: paymentSide="..tostring(paymentSide).." PAYMENT_TIMEOUT="..tostring(PAYMENT_TIMEOUT))
             local paymentBaseline = state.getState("paymentBaseline")
             if not paymentBaseline then
                 logging.writeLog("DEBUG", "paymentBaseline is nil, cannot detect payment")
