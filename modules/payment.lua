@@ -18,7 +18,6 @@ local idleWarningLogged = false
 local function checkIdleTimeout()
     local screen = state.getState("screen")
     local subState = state.getState("subState")
-    logging.writeLog("DEBUG", "checkIdleTimeout: screen="..tostring(screen).." subState="..tostring(subState).." IDLE_TIMEOUT="..tostring(IDLE_TIMEOUT))
     if (screen == 2) or (screen == 3 and subState) then
         local lastActivity = state.getState("lastActivity")
         -- Reset warning if lastActivity changed
