@@ -3,6 +3,14 @@
 --          renderScreen3Confirming(), renderScreen4(), renderCurrentScreen()
 
 local logging, pedestal, ui, peripherals, config, state, db, MSG
+local CATEGORIES = _G.CATEGORIES or {}
+local MATERIALS = _G.MATERIALS or {}
+local QUANTITIES = _G.QUANTITIES or {}
+local PAYMENT_TIMEOUT = _G.PAYMENT_TIMEOUT or 30
+local CONFIRM_DELAY = _G.CONFIRM_DELAY or 5
+local quantityToNumber = _G.quantityToNumber
+local findQuantityIndex = _G.findQuantityIndex
+local calculatePriceWithDiscount = _G.calculatePriceWithDiscount
 
 -- Initialize module with dependencies
 local function init(loggingModule, pedestalModule, uiModule, peripheralsModule, configModule, stateModule, dbModule)
@@ -24,8 +32,9 @@ end
 
 -- Helper: execute UI and pedestal updates in parallel or sequential based on config
 local function executeParallelOrSequential(uiFunc, pedestalFunc)
+    logging.writeLog("DEBUG", "executeParallelOrSequential: config=" .. tostring(config) .. " config.get=" .. tostring(config.get))
     local parallelRendering = config.get("PARALLEL_RENDERING")
-    logging.writeLog("DEBUG", "executeParallelOrSequential: PARALLEL_RENDERING=" .. tostring(parallelRendering))
+    logging.writeLog("DEBUG", "executeParallelOrSequential: PARALLEL_RENDERING=" .. tostring(parallelRendering) .. " (type: " .. type(parallelRendering) .. ")")
     if parallelRendering == false then
         logging.writeLog("DEBUG", "Parallel rendering disabled, executing sequentially")
         uiFunc()
@@ -44,6 +53,9 @@ end
 -- Screen 1: Category selection
 local function renderScreen1()
     logging.writeLog("INFO", "Rendering screen 1 (categories)")
+    logging.writeLog("DEBUG", "CATEGORIES count: " .. tostring(#CATEGORIES))
+    logging.writeLog("DEBUG", "MATERIALS count: " .. tostring(#MATERIALS))
+    logging.writeLog("DEBUG", "QUANTITIES count: " .. tostring(#QUANTITIES))
     logging.writeLog("DEBUG", "Calling pedestal.clearPedestals()")
     local ok, err = pcall(pedestal.clearPedestals)
     if not ok then
@@ -291,7 +303,7 @@ end
 
 -- Update screen based on state
 local function renderCurrentScreen()
-    logging.writeLog("DEBUG", "renderCurrentScreen called")
+    logging.writeLog("INFO", "renderCurrentScreen called - screen=" .. tostring(state.getState("screen")) .. " subState=" .. tostring(state.getState("subState")))
     state.updateState({ lastActivity = os.clock() })
     local screen = state.getState("screen")
     local subState = state.getState("subState")

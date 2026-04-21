@@ -4,8 +4,8 @@
 
 local logging, peripherals, config, state
 local pedestals
-local PEDESTALS = PEDESTALS
-local PARALLEL_RENDERING = PARALLEL_RENDERING
+local PEDESTALS = _G.PEDESTALS or {}
+local PARALLEL_RENDERING = _G.PARALLEL_RENDERING or false
 
 -- Initialize module with dependencies
 local function init(loggingModule, peripheralsModule, configModule, stateModule)
