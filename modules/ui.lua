@@ -1,7 +1,7 @@
 -- modules/ui.lua — Basalt UI creation and updates with fixed coordinate positioning
 -- Exports: init(), createUI(), updateUI(), getFrame(), getCancelButton(), getHintLabel()
 
-local logging, peripherals, config, state, basalt
+local logging, peripherals, config, state, basalt, MSG
 local mainFrame, headerLabel, cancelButton
 local monitorWidth, monitorHeight
 local contentLabels = {}  -- key = line number, value = label object
@@ -15,11 +15,28 @@ local function init(loggingModule, peripheralsModule, configModule, stateModule,
     config = configModule
     state = stateModule
     basalt = basaltModule
+    logging.writeLog("DEBUG", "UI init called, getting MSG from config")
+    MSG = configModule.get("MSG")
+    logging.writeLog("DEBUG", "UI init: MSG = " .. tostring(MSG))
+    if not MSG then
+        error("UI init: MSG configuration not loaded")
+    end
+    logging.writeLog("DEBUG", "UI init: MSG.header = " .. tostring(MSG.header))
 end
 
 -- Create UI frame with fixed coordinate positioning
 local function createUI()
     logging.writeLog("DEBUG", "UI createUI called (fixed coordinate)")
+    -- Ensure MSG is loaded
+    if not MSG then
+        logging.writeLog("WARN", "MSG is nil in createUI, attempting to load from config")
+        MSG = config.get("MSG")
+        if not MSG then
+            logging.writeLog("ERROR", "MSG not available in createUI")
+            return
+        end
+    end
+    logging.writeLog("DEBUG", "UI createUI: MSG.header = " .. tostring(MSG.header))
     local monitor = peripherals.getMonitor()
     if not monitor then
         logging.writeLog("ERROR", "Monitor not available for UI creation")
@@ -58,7 +75,7 @@ local function createUI()
     headerLabel = mainFrame:addLabel()
         :setPosition(1,1):setSize(width,1)
         :setBackground(colors.red):setForeground(colors.white)
-        :setText(config.MSG.header)
+        :setText(MSG.header)
     logging.writeLog("DEBUG", "Header label created (red background)")
 
     -- Content labels from line 2 up to line (height - 4) to leave gap above button
@@ -79,7 +96,7 @@ local function createUI()
 
     -- Cancel button (bottom-left corner) styled like cashier example
     local btnWidth = math.max(1, math.min(14, width - 4))  -- Fixed width 16, but ensure fits monitor, minimum 1
-    local btnText = " " .. config.MSG.cancel_btn .. " "  -- Padded text
+    local btnText = " " .. MSG.cancel_btn .. " "  -- Padded text
     cancelButton = mainFrame:addButton()
         :setText(btnText)
         :setPosition(2, height - 3)  -- Bottom-left with margin
@@ -118,7 +135,7 @@ local function updateUI()
 
     if screen == 1 then
         -- Screen 1: Category selection with discount info
-        local discountInfo = config.MSG.screen1_discount_info
+        local discountInfo = MSG.screen1_discount_info
         if type(discountInfo) == "table" then
             -- Display each line in separate label
             local line = contentFirstLine
@@ -139,13 +156,13 @@ local function updateUI()
             end
             -- Hint line
             if line <= contentLastLine and contentLabels[line] then
-                contentLabels[line]:setText(config.MSG.screen1_hint)
+                contentLabels[line]:setText(MSG.screen1_hint)
                 contentLabels[line]:setVisible(true)
             end
         else
             -- Fallback: single line hint
             if contentLabels[contentFirstLine] then
-                contentLabels[contentFirstLine]:setText(config.MSG.screen1_hint)
+                contentLabels[contentFirstLine]:setText(MSG.screen1_hint)
                 contentLabels[contentFirstLine]:setVisible(true)
             end
         end
@@ -157,7 +174,7 @@ local function updateUI()
     elseif screen == 2 then
         -- Screen 2: Material selection - single hint line
         if contentLabels[contentFirstLine] then
-            contentLabels[contentFirstLine]:setText(config.MSG.screen2_hint)
+            contentLabels[contentFirstLine]:setText(MSG.screen2_hint)
             contentLabels[contentFirstLine]:setVisible(true)
         end
         -- Show cancel button
@@ -171,10 +188,10 @@ local function updateUI()
             local basePriceStr = ""
             local selectedMaterial = state.getState("selectedMaterial")
             if selectedMaterial then
-                basePriceStr = string.format(config.MSG.screen3_base_price,
+                basePriceStr = string.format(MSG.screen3_base_price,
                     selectedMaterial.basePrice, selectedMaterial.minQty)
             end
-            local hintText = basePriceStr .. " | " .. config.MSG.screen3_hint_select
+            local hintText = basePriceStr .. " | " .. MSG.screen3_hint_select
             if contentLabels[contentFirstLine] then
                 contentLabels[contentFirstLine]:setText(hintText)
                 contentLabels[contentFirstLine]:setVisible(true)
@@ -194,16 +211,16 @@ local function updateUI()
 
             if selectedMaterial and calculatedPrice and basePriceForQty then
                 local linesText = {
-                    string.format(config.MSG.screen3_base_price,
+                    string.format(MSG.screen3_base_price,
                         selectedMaterial.basePrice, selectedMaterial.minQty),
-                    string.format(config.MSG.screen3_breakdown_line,
+                    string.format(MSG.screen3_breakdown_line,
                         selectedMaterial.basePrice, selectedQty, selectedMaterial.minQty, basePriceForQty),
-                    string.format(config.MSG.screen3_discount_line,
+                    string.format(MSG.screen3_discount_line,
                         discountPercent, basePriceForQty - calculatedPrice),
-                    string.format(config.MSG.screen3_total_line, calculatedPrice),
+                    string.format(MSG.screen3_total_line, calculatedPrice),
                     "", -- empty line
-                    string.format(config.MSG.screen3_insert, calculatedPrice),
-                    config.MSG.screen3_pedestal_instruction
+                    string.format(MSG.screen3_insert, calculatedPrice),
+                    MSG.screen3_pedestal_instruction
                 }
                 for offset, text in ipairs(linesText) do
                     local line = contentFirstLine + offset - 1
@@ -234,7 +251,7 @@ local function updateUI()
     elseif screen == 4 then
         -- Screen 4: Thank you message
         if contentLabels[contentFirstLine] then
-            contentLabels[contentFirstLine]:setText(config.MSG.screen4_thanks)
+            contentLabels[contentFirstLine]:setText(MSG.screen4_thanks)
             contentLabels[contentFirstLine]:setVisible(true)
         end
         -- Hide cancel button

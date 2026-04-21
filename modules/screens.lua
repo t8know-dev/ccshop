@@ -2,7 +2,7 @@
 -- Exports: init(), renderScreen1(), renderScreen2(), renderScreen3Selecting(),
 --          renderScreen3Confirming(), renderScreen4(), renderCurrentScreen()
 
-local logging, pedestal, ui, peripherals, config, state, db
+local logging, pedestal, ui, peripherals, config, state, db, MSG
 
 -- Initialize module with dependencies
 local function init(loggingModule, pedestalModule, uiModule, peripheralsModule, configModule, stateModule, dbModule)
@@ -13,6 +13,13 @@ local function init(loggingModule, pedestalModule, uiModule, peripheralsModule, 
     config = configModule
     state = stateModule
     db = dbModule
+    logging.writeLog("DEBUG", "Screens init called, getting MSG from config")
+    MSG = configModule.get("MSG")
+    logging.writeLog("DEBUG", "Screens init: MSG = " .. tostring(MSG))
+    if not MSG then
+        error("Screens init: MSG configuration not loaded")
+    end
+    logging.writeLog("DEBUG", "Screens init: MSG.error_deposit = " .. tostring(MSG.error_deposit))
 end
 
 -- Screen 1: Category selection

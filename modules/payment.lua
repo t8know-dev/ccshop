@@ -1,7 +1,7 @@
 -- modules/payment.lua — Payment detection and idle timeout monitoring
 -- Exports: init(), checkPaymentDetection(), checkIdleTimeout(), paymentMonitorLoop()
 
-local logging, state, peripherals, screens, config
+local logging, state, peripherals, screens, config, MSG
 
 -- Initialize module with dependencies
 local function init(loggingModule, stateModule, peripheralsModule, screensModule, configModule)
@@ -10,6 +10,8 @@ local function init(loggingModule, stateModule, peripheralsModule, screensModule
     peripherals = peripheralsModule
     screens = screensModule
     config = configModule
+    MSG = configModule.get("MSG")
+    -- MSG may be nil, but that's OK as we only use it in commented code
 end
 
 -- Check idle timeout

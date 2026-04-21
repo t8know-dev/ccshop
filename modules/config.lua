@@ -69,12 +69,21 @@ end
 
 -- Helper to get a configuration value
 local function get(key)
-    return _G[key]
+    local value = _G[key]
+    -- Debug logging for MSG
+    if key == "MSG" then
+        local logging = _G.logging  -- May not be available
+        if logging and logging.writeLog then
+            pcall(logging.writeLog, "DEBUG", "config.get('MSG') called, value is " .. tostring(value))
+        end
+    end
+    return value
 end
 
 -- Helper to get a message string
 local function getMsg(key)
-    return MSG and MSG[key]
+    local msgTable = get("MSG")
+    return msgTable and msgTable[key]
 end
 
 return {
