@@ -5,7 +5,7 @@ local logging, peripherals, config, state, basalt, MSG
 local mainFrame, headerLabel, cancelButton
 local monitorWidth, monitorHeight
 local contentLabels = {}  -- key = line number, value = label object
-local contentFirstLine = 2
+local contentFirstLine = 3  -- default, may be increased if monitor height allows
 local contentLastLine = 9
 local spursToCoins = _G.spursToCoins
 
@@ -72,15 +72,30 @@ local function createUI()
     monitorHeight = height
     logging.writeLog("DEBUG", "Monitor dimensions: " .. width .. "x" .. height)
 
-    -- Header (top bar) - Line 1
+    -- Header (top bar) - Lines 1-2 with larger font, centered
     headerLabel = mainFrame:addLabel()
-        :setPosition(1,1):setSize(width,1)
-        :setBackground(colors.red):setForeground(colors.white):setTextScale(1)
+        :setPosition(1,1):setSize(width,2)
+        :setBackground(colors.red):setForeground(colors.white):setTextScale(2)
+        :setTextAlign("center")
         :setText(MSG.header)
-    logging.writeLog("DEBUG", "Header label created (red background)")
+    logging.writeLog("DEBUG", "Header label created (red background, scale 2)")
 
-    -- Content labels from line 2 up to line (height - 4) to leave gap above button
-    contentFirstLine = 2
+    -- Determine starting line for content based on available space
+    -- We want a gap line between header and content if monitor is tall enough
+    local minHeightForGap = 9  -- need at least 9 lines to comfortably have gap
+    if height >= minHeightForGap then
+        -- Spacer line between header and content (line 3)
+        local _ = mainFrame:addLabel()
+            :setPosition(1,3):setSize(width,1)
+            :setBackground(colors.black):setText("")
+        logging.writeLog("DEBUG", "Spacer label created at line 3")
+        contentFirstLine = 4  -- header lines 1-2, spacer line 3, content starts at 4
+    else
+        logging.writeLog("WARN", "Monitor height " .. height .. " is small, skipping spacer line")
+        contentFirstLine = 3  -- header lines 1-2, no spacer, content starts at 3
+    end
+
+    -- Content labels from contentFirstLine up to line (height - 4) to leave gap above button
     contentLastLine = height - 4  -- leave at least 1 line gap above button
     if contentLastLine < contentFirstLine then
         contentLastLine = contentFirstLine

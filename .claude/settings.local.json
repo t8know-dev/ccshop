@@ -10,7 +10,8 @@
       "Bash(do echo:*)",
       "Bash(done)",
       "Bash(find . -name \"*.lua\" -exec luac -p {})",
-      "Bash(2)"
+      "Bash(2)",
+      "Bash(echo \"Exit code: $?\")"
     ]
   }
 }
