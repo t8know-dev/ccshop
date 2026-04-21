@@ -75,8 +75,15 @@ end
 
 -- Helper: clear a single pedestal
 local function clearSinglePedestal(idx)
-    if not pedestals then return end
-    if not pedestals[idx] then return end
+    logging.writeLog("DEBUG", "clearSinglePedestal(" .. idx .. ") started")
+    if not pedestals then
+        logging.writeLog("DEBUG", "clearSinglePedestal: pedestals is nil")
+        return
+    end
+    if not pedestals[idx] then
+        logging.writeLog("DEBUG", "clearSinglePedestal: pedestals[" .. idx .. "] is nil")
+        return
+    end
     local ok, err = pcall(pedestals[idx].setItem, nil)
     if not ok then
         logging.writeLog("WARN", "Pedestal " .. idx .. " setItem failed: " .. tostring(err))
@@ -87,6 +94,7 @@ local function clearSinglePedestal(idx)
     local ok2, err2 = pcall(pedestals[idx].setLabelRendered, false)
     if not ok1 then logging.writeLog("WARN", "Pedestal " .. idx .. " setItemRendered failed: " .. tostring(err1)) end
     if not ok2 then logging.writeLog("WARN", "Pedestal " .. idx .. " setLabelRendered failed: " .. tostring(err2)) end
+    logging.writeLog("DEBUG", "clearSinglePedestal(" .. idx .. ") finished")
 end
 
 -- Helper: center options across available pedestals
@@ -237,7 +245,7 @@ local function setPedestalOptionsParallel(options)
 
         _parallelBusy = true
         local parallelCompleted = false
-        local timeout = 5  -- seconds timeout
+        local timeout = 2  -- seconds timeout (reduced from 5)
 
         -- Timeout task
         local timeoutTask = function()
@@ -349,7 +357,7 @@ local function clearPedestals()
             _parallelBusy = true
             logging.writeLog("DEBUG", "clearPedestals: _parallelBusy set, clearTasks count = " .. #clearTasks)
             local parallelCompleted = false
-            local timeout = 5  -- seconds timeout
+            local timeout = 2  -- seconds timeout (reduced from 5)
 
             -- Timeout task
             local timeoutTask = function()
@@ -358,6 +366,9 @@ local function clearPedestals()
                 logging.writeLog("DEBUG", "Timeout task after sleep")
                 if not parallelCompleted then
                     logging.writeLog("WARN", "Parallel clear timeout after " .. timeout .. " seconds, falling back to sequential")
+                    -- Ensure parallel busy flag is cleared so other operations can continue
+                    _parallelBusy = false
+                    logging.writeLog("DEBUG", "Timeout task cleared _parallelBusy flag")
                 end
             end
 

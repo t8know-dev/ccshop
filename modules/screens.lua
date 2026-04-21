@@ -56,6 +56,8 @@ local function renderScreen1()
     logging.writeLog("DEBUG", "CATEGORIES count: " .. tostring(#CATEGORIES))
     logging.writeLog("DEBUG", "MATERIALS count: " .. tostring(#MATERIALS))
     logging.writeLog("DEBUG", "QUANTITIES count: " .. tostring(#QUANTITIES))
+    -- Clear pedestals first (like screen 2 and 3 selecting)
+    pedestal.clearPedestals()
     local options = {}
     for _, cat in ipairs(CATEGORIES) do
         table.insert(options, { item = cat.item, label = cat.label })
@@ -70,13 +72,6 @@ local function renderScreen1()
         end,
         function()
             logging.writeLog("DEBUG", "Pedestal update task")
-            -- Clear pedestals first, then set new options
-            local ok, err = pcall(pedestal.clearPedestals)
-            if not ok then
-                logging.writeLog("ERROR", "pedestal.clearPedestals failed: " .. tostring(err))
-            else
-                logging.writeLog("DEBUG", "pedestal.clearPedestals completed successfully")
-            end
             pedestal.setPedestalOptions(options)
             logging.writeLog("DEBUG", "Pedestal update completed")
         end
