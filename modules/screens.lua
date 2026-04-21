@@ -31,10 +31,18 @@ local function renderScreen1()
         table.insert(options, { item = cat.item, label = cat.label })
     end
     -- Update UI and pedestals in parallel
-    logging.writeLog("DEBUG", "Starting parallel UI and pedestal update")
+    logging.writeLog("DEBUG", "Starting parallel UI and pedestal update for screen 1")
     local ok, err = pcall(parallel.waitForAll,
-        function() ui.updateUI() end,
-        function() pedestal.setPedestalOptions(options) end
+        function()
+            logging.writeLog("DEBUG", "Parallel task 1: ui.updateUI()")
+            ui.updateUI()
+            logging.writeLog("DEBUG", "Parallel task 1 completed")
+        end,
+        function()
+            logging.writeLog("DEBUG", "Parallel task 2: pedestal.setPedestalOptions()")
+            pedestal.setPedestalOptions(options)
+            logging.writeLog("DEBUG", "Parallel task 2 completed")
+        end
     )
     if not ok then
         logging.writeLog("WARN", "Parallel render failed: " .. tostring(err) .. ", falling back to sequential")

@@ -59,9 +59,12 @@ payment.init(logging, state, peripherals, screens, config)
 -- State change listener: trigger screen re‑render when screen changes
 -- ============================================================================
 state.subscribe(function(changes)
+    logging.writeLog("DEBUG", "State subscriber called with changes: " .. textutils.serialize(changes))
     if changes.screen ~= nil or changes.subState ~= nil or changes.selectedQty ~= nil then
         logging.writeLog("DEBUG", "State changes: " .. textutils.serialize(changes) .. " triggering render")
         screens.renderCurrentScreen()
+    else
+        logging.writeLog("DEBUG", "State changes ignored (no screen/subState/selectedQty)")
     end
 end)
 

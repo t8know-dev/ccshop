@@ -73,11 +73,14 @@ local function updateState(changes)
     end
 
     if changed then
-        if ok and logging.writeLog and hasImportantChange then
-            logging.writeLog("DEBUG", "State changed, notifying " .. #subscribers .. " subscribers")
+        if ok and logging.writeLog then
+            logging.writeLog("DEBUG", "State changed, notifying " .. #subscribers .. " subscribers. Changes: " .. textutils.serialize(changes))
         end
         for _, callback in ipairs(subscribers) do
-            pcall(callback, changes)
+            local cbOk, cbErr = pcall(callback, changes)
+            if not cbOk and ok and logging.writeLog then
+                logging.writeLog("ERROR", "Subscriber callback failed: " .. tostring(cbErr))
+            end
         end
     end
 end
@@ -127,7 +130,10 @@ local function resetToMainScreen()
         paymentPaid = false,
         paymentCheckCount = 0,
         paymentBaseline = nil,
-        paymentDeadline = nil
+        paymentDeadline = nil,
+        currentOptions = {},
+        currentPedestalIndices = {},
+        lastSelectedPedestal = nil
     })
 end
 

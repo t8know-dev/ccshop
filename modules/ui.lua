@@ -135,27 +135,33 @@ local function createUI()
         :setBackground(colors.red)
         :setForeground(colors.white)
         :onClick(function()
+            logging.writeLog("DEBUG", "Cancel button onClick handler started")
             peripherals.playNoteblockSoundLow()
             -- Lock depositor if on payment screen (screen 3 confirming)
             if state.getState("screen") == 3 and state.getState("subState") == "confirming" then
+                logging.writeLog("DEBUG", "Cancel button: locking depositor")
                 peripherals.lockDepositor()
             end
             logging.writeLog("DEBUG", "Cancel button clicked, resetting to main screen")
             -- Reset to main screen
             state.resetToMainScreen()
+            -- Immediately update UI to reflect screen 1 (hide cancel button, show categories)
+            updateUI()
+            logging.writeLog("DEBUG", "Cancel button onClick handler finished")
         end)
+    logging.writeLog("DEBUG", "Cancel button created: " .. tostring(cancelButton) .. " at line " .. (height - 3))
     if cancelButton and cancelButton.setVisible then
         cancelButton:setVisible(false)
     else
         logging.writeLog("ERROR", "cancelButton invalid " .. tostring(cancelButton))
     end
-    logging.writeLog("DEBUG", "Cancel button created at line " .. (height - 3))
 end
 
 -- Update UI hints and cancel button visibility based on screen
 local function updateUI()
     local screen = state.getState("screen")
     local subState = state.getState("subState")
+    logging.writeLog("DEBUG", "updateUI called: screen=" .. tostring(screen) .. " subState=" .. tostring(subState))
 
     -- Hide all content labels first
     for _, label in pairs(contentLabels) do
@@ -198,8 +204,11 @@ local function updateUI()
             end
         end
         -- Hide cancel button
+        logging.writeLog("DEBUG", "Screen 1: hiding cancel button")
         if cancelButton and cancelButton.setVisible then
             cancelButton:setVisible(false)
+        else
+            logging.writeLog("WARN", "Screen 1: cancelButton invalid")
         end
 
     elseif screen == 2 then
@@ -209,8 +218,11 @@ local function updateUI()
             contentLabels[contentFirstLine]:setVisible(true)
         end
         -- Show cancel button
+        logging.writeLog("DEBUG", "Screen 2: showing cancel button")
         if cancelButton and cancelButton.setVisible then
             cancelButton:setVisible(true)
+        else
+            logging.writeLog("WARN", "Screen 2: cancelButton invalid")
         end
 
     elseif screen == 3 then
@@ -228,8 +240,11 @@ local function updateUI()
                 contentLabels[contentFirstLine]:setVisible(true)
             end
             -- Show cancel button
+            logging.writeLog("DEBUG", "Screen 3 selecting: showing cancel button")
             if cancelButton and cancelButton.setVisible then
                 cancelButton:setVisible(true)
+            else
+                logging.writeLog("WARN", "Screen 3 selecting: cancelButton invalid")
             end
 
         elseif subState == "confirming" then
@@ -282,8 +297,11 @@ local function updateUI()
                 end
             end
             -- Show cancel button
+            logging.writeLog("DEBUG", "Screen 3 confirming: showing cancel button")
             if cancelButton and cancelButton.setVisible then
                 cancelButton:setVisible(true)
+            else
+                logging.writeLog("WARN", "Screen 3 confirming: cancelButton invalid")
             end
         end
 
@@ -294,8 +312,11 @@ local function updateUI()
             contentLabels[contentFirstLine]:setVisible(true)
         end
         -- Hide cancel button
+        logging.writeLog("DEBUG", "Screen 4: hiding cancel button")
         if cancelButton and cancelButton.setVisible then
             cancelButton:setVisible(false)
+        else
+            logging.writeLog("WARN", "Screen 4: cancelButton invalid")
         end
     end
 end
