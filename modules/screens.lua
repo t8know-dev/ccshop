@@ -167,7 +167,11 @@ local function renderScreen3Confirming()
     if not ok then
         logging.writeLog("ERROR", "Depositor setTotalPrice failed: " .. tostring(err))
         logging.writeLog("DEBUG", "Depositor error, resetting to main screen")
-        ui.getHintLabel():setText(MSG.error_deposit)
+        local hintLabel = ui.getHintLabel()
+        if hintLabel then
+            hintLabel:setText(MSG.error_deposit)
+            hintLabel:setVisible(true)
+        end
         os.sleep(2)
         state.resetToMainScreen()
         return

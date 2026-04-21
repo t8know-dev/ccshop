@@ -1,9 +1,12 @@
--- modules/ui.lua — Basalt UI creation and updates
+-- modules/ui.lua — Basalt UI creation and updates with fixed coordinate positioning
 -- Exports: init(), createUI(), updateUI(), getFrame(), getCancelButton(), getHintLabel()
 
 local logging, peripherals, config, state, basalt
-local mainFrame, headerLabel, hintLabel, cancelButton, discountLabel
-local monitorWidth, monitorHeight, hintYPos
+local mainFrame, headerLabel, cancelButton
+local monitorWidth, monitorHeight
+local contentLabels = {}  -- key = line number, value = label object
+local contentFirstLine = 2
+local contentLastLine = 9
 
 -- Initialize module with dependencies
 local function init(loggingModule, peripheralsModule, configModule, stateModule, basaltModule)
@@ -14,9 +17,9 @@ local function init(loggingModule, peripheralsModule, configModule, stateModule,
     basalt = basaltModule
 end
 
--- Create UI frame
+-- Create UI frame with fixed coordinate positioning
 local function createUI()
-    logging.writeLog("DEBUG", "UI createUI called")
+    logging.writeLog("DEBUG", "UI createUI called (fixed coordinate)")
     local monitor = peripherals.getMonitor()
     if not monitor then
         logging.writeLog("ERROR", "Monitor not available for UI creation")
@@ -47,40 +50,39 @@ local function createUI()
     logging.writeLog("DEBUG", "Main frame background set")
     -- Get monitor dimensions via term.getSize() after redirect
     local width, height = term.getSize()
-    local W, H = width, height
-    monitorWidth = W
-    monitorHeight = H
-    -- Header (top bar)
+    monitorWidth = width
+    monitorHeight = height
+    logging.writeLog("DEBUG", "Monitor dimensions: " .. width .. "x" .. height)
+
+    -- Header (top bar) - Line 1
     headerLabel = mainFrame:addLabel()
-        :setPosition(1,1):setSize(W,1)
-        :setBackground(colors.brown):setForeground(colors.white)
-        :setText(MSG.header)
-    -- Hint line (below top bar with 0 line gap for more space)
-    local hintY = 2
-    -- Ensure hint line does not overlap button (button occupies rows H-3, H-2, H-1)
-    local maxHintY = H - 4  -- at least 1 line gap above button
-    if hintY > maxHintY then
-        hintY = maxHintY
+        :setPosition(1,1):setSize(width,1)
+        :setBackground(colors.red):setForeground(colors.white)
+        :setText(config.MSG.header)
+    logging.writeLog("DEBUG", "Header label created (red background)")
+
+    -- Content labels from line 2 up to line (height - 4) to leave gap above button
+    contentFirstLine = 2
+    contentLastLine = height - 4  -- leave at least 1 line gap above button
+    if contentLastLine < contentFirstLine then
+        contentLastLine = contentFirstLine
+        logging.writeLog("WARN", "Monitor height very small, UI may be cramped")
     end
-    -- Ensure hint line is at least row 2 (below header)
-    if hintY < 2 then
-        hintY = 2
+    logging.writeLog("DEBUG", "Creating content labels lines " .. contentFirstLine .. " to " .. contentLastLine)
+    for i = contentFirstLine, contentLastLine do
+        contentLabels[i] = mainFrame:addLabel()
+            :setPosition(1, i):setSize(width, 1)
+            :setBackground(colors.black):setForeground(colors.lightGray)
+            :setVisible(false)
+        logging.writeLog("DEBUG", "Content label line " .. i .. " created")
     end
-    hintYPos = hintY  -- store for later use in updateUI
-    hintLabel = mainFrame:addLabel()
-        :setPosition(1, hintY):setSize(W,1)
-        :setBackground(colors.black):setForeground(colors.lightGray)
-    -- Discount info line (below hint line, only shown on screen 1)
-    discountLabel = mainFrame:addLabel()
-        :setPosition(1, hintY + 1):setSize(W,1)
-        :setBackground(colors.black):setForeground(colors.lightGray)
-        :setVisible(false)
+
     -- Cancel button (bottom-left corner) styled like cashier example
-    local btnWidth = math.max(1, math.min(14, W - 4))  -- Fixed width 16, but ensure fits monitor, minimum 1
-    local btnText = " " .. MSG.cancel_btn .. " "  -- Padded text
+    local btnWidth = math.max(1, math.min(14, width - 4))  -- Fixed width 16, but ensure fits monitor, minimum 1
+    local btnText = " " .. config.MSG.cancel_btn .. " "  -- Padded text
     cancelButton = mainFrame:addButton()
         :setText(btnText)
-        :setPosition(2, H - 3)  -- Bottom-left with margin
+        :setPosition(2, height - 3)  -- Bottom-left with margin
         :setSize(btnWidth, 3)
         :setBackground(colors.red)
         :setForeground(colors.white)
@@ -93,123 +95,159 @@ local function createUI()
             logging.writeLog("DEBUG", "Cancel button clicked, resetting to main screen")
             -- Reset to main screen
             state.resetToMainScreen()
-            -- Trigger screen render via callback? The main loop will call renderCurrentScreen.
-            -- For now, we need to call renderCurrentScreen; but we don't have access to screens module.
-            -- We'll rely on the main loop to detect state changes and re-render.
-            -- This will be handled by the main script.
         end)
     if cancelButton and cancelButton.setVisible then
         cancelButton:setVisible(false)
     else
         logging.writeLog("ERROR", "cancelButton invalid " .. tostring(cancelButton))
     end
+    logging.writeLog("DEBUG", "Cancel button created at line " .. (height - 3))
 end
 
--- Update UI hints and cancel button visibility
+-- Update UI hints and cancel button visibility based on screen
 local function updateUI()
     local screen = state.getState("screen")
     local subState = state.getState("subState")
-    if screen == 1 then
-        -- Combine discount lines and hint into single multi-line text
-        local discountInfo = MSG.screen1_discount_info
-        local lines = {}
 
+    -- Hide all content labels first
+    for line, label in pairs(contentLabels) do
+        if label and label.setVisible then
+            label:setVisible(false)
+        end
+    end
+
+    if screen == 1 then
+        -- Screen 1: Category selection with discount info
+        local discountInfo = config.MSG.screen1_discount_info
         if type(discountInfo) == "table" then
-            -- Add each discount line as separate line
-            for _, line in ipairs(discountInfo) do
-                table.insert(lines, line)
+            -- Display each line in separate label
+            local line = contentFirstLine
+            for _, text in ipairs(discountInfo) do
+                if line <= contentLastLine and contentLabels[line] then
+                    contentLabels[line]:setText(text)
+                    contentLabels[line]:setVisible(true)
+                    line = line + 1
+                else
+                    break
+                end
+            end
+            -- Empty line separator
+            if line <= contentLastLine and contentLabels[line] then
+                contentLabels[line]:setText("")
+                contentLabels[line]:setVisible(true)
+                line = line + 1
+            end
+            -- Hint line
+            if line <= contentLastLine and contentLabels[line] then
+                contentLabels[line]:setText(config.MSG.screen1_hint)
+                contentLabels[line]:setVisible(true)
             end
         else
-            -- Already a string, treat as single line
-            table.insert(lines, discountInfo)
+            -- Fallback: single line hint
+            if contentLabels[contentFirstLine] then
+                contentLabels[contentFirstLine]:setText(config.MSG.screen1_hint)
+                contentLabels[contentFirstLine]:setVisible(true)
+            end
+        end
+        -- Hide cancel button
+        if cancelButton and cancelButton.setVisible then
+            cancelButton:setVisible(false)
         end
 
-        -- Add empty line separator
-        table.insert(lines, "")
-        -- Add hint line
-        table.insert(lines, MSG.screen1_hint)
-
-        local fullText = table.concat(lines, "\n")
-        local numLines = #lines
-        local W = monitorWidth or 80
-
-        -- Use hintLabel to display all lines (discount info + separator + hint)
-        hintLabel:setSize(W, numLines)
-        hintLabel:setText(fullText)
-        discountLabel:setVisible(false)
-        if cancelButton and cancelButton.setVisible then cancelButton:setVisible(false) end
     elseif screen == 2 then
-        local W = monitorWidth or 80
-        hintLabel:setSize(W, 1)
-        hintLabel:setText(MSG.screen2_hint)
-        discountLabel:setVisible(false)
-        if cancelButton and cancelButton.setVisible then cancelButton:setVisible(true) end
+        -- Screen 2: Material selection - single hint line
+        if contentLabels[contentFirstLine] then
+            contentLabels[contentFirstLine]:setText(config.MSG.screen2_hint)
+            contentLabels[contentFirstLine]:setVisible(true)
+        end
+        -- Show cancel button
+        if cancelButton and cancelButton.setVisible then
+            cancelButton:setVisible(true)
+        end
+
     elseif screen == 3 then
         if subState == "selecting" then
-            -- Show base price and hint
+            -- Screen 3 selecting: show base price and hint
             local basePriceStr = ""
             local selectedMaterial = state.getState("selectedMaterial")
             if selectedMaterial then
-                basePriceStr = string.format(MSG.screen3_base_price, selectedMaterial.basePrice, selectedMaterial.minQty) .. " | "
+                basePriceStr = string.format(config.MSG.screen3_base_price,
+                    selectedMaterial.basePrice, selectedMaterial.minQty)
             end
-            local W = monitorWidth or 80
-            hintLabel:setSize(W, 1)
-            hintLabel:setText(basePriceStr .. MSG.screen3_hint_select)
-            discountLabel:setVisible(false)
-            if cancelButton and cancelButton.setVisible then cancelButton:setVisible(true) end
+            local hintText = basePriceStr .. " | " .. config.MSG.screen3_hint_select
+            if contentLabels[contentFirstLine] then
+                contentLabels[contentFirstLine]:setText(hintText)
+                contentLabels[contentFirstLine]:setVisible(true)
+            end
+            -- Show cancel button
+            if cancelButton and cancelButton.setVisible then
+                cancelButton:setVisible(true)
+            end
+
         elseif subState == "confirming" then
-            -- Show single-line breakdown: base price, calculation, discount, insert instruction
+            -- Screen 3 confirming: payment breakdown (lines 2-8)
             local selectedMaterial = state.getState("selectedMaterial")
             local selectedQty = state.getState("selectedQty")
             local calculatedPrice = state.getState("calculatedPrice")
             local basePriceForQty = state.getState("basePriceForQty")
             local discountPercent = state.getState("discountPercent") or 0
 
-            -- Build single line parts
-            local parts = {}
-
-            if selectedMaterial and calculatedPrice then
-                table.insert(parts, string.format(MSG.screen3_base_price, selectedMaterial.basePrice, selectedMaterial.minQty))
-
-                if basePriceForQty then
-                    local discountAmount = basePriceForQty - calculatedPrice
-                    -- Calculation part
-                    table.insert(parts, string.format("%d × %d/%d = %d",
-                        selectedMaterial.basePrice, selectedQty, selectedMaterial.minQty, basePriceForQty))
-                    -- Discount part
-                    table.insert(parts, string.format("- %d%% discount (%d spurs)",
-                        discountPercent, discountAmount))
-                else
-                    table.insert(parts, string.format(MSG.screen3_price_calc, calculatedPrice))
+            if selectedMaterial and calculatedPrice and basePriceForQty then
+                local linesText = {
+                    string.format(config.MSG.screen3_base_price,
+                        selectedMaterial.basePrice, selectedMaterial.minQty),
+                    string.format(config.MSG.screen3_breakdown_line,
+                        selectedMaterial.basePrice, selectedQty, selectedMaterial.minQty, basePriceForQty),
+                    string.format(config.MSG.screen3_discount_line,
+                        discountPercent, basePriceForQty - calculatedPrice),
+                    string.format(config.MSG.screen3_total_line, calculatedPrice),
+                    "", -- empty line
+                    string.format(config.MSG.screen3_insert, calculatedPrice),
+                    config.MSG.screen3_pedestal_instruction
+                }
+                for offset, text in ipairs(linesText) do
+                    local line = contentFirstLine + offset - 1
+                    if line <= contentLastLine and contentLabels[line] then
+                        contentLabels[line]:setText(text)
+                        contentLabels[line]:setVisible(true)
+                    else
+                        break
+                    end
                 end
-
-                table.insert(parts, string.format(MSG.screen3_insert, calculatedPrice))
             else
                 -- Fallback if data missing
-                table.insert(parts, "Price calculation error")
-                table.insert(parts, "Please contact operator")
+                if contentLabels[contentFirstLine] then
+                    contentLabels[contentFirstLine]:setText("Price calculation error")
+                    contentLabels[contentFirstLine]:setVisible(true)
+                end
+                if contentLabels[contentFirstLine + 1] and (contentFirstLine + 1) <= contentLastLine then
+                    contentLabels[contentFirstLine + 1]:setText("Please contact operator")
+                    contentLabels[contentFirstLine + 1]:setVisible(true)
+                end
             end
-
-            local fullText = table.concat(parts, " | ")
-            local W = monitorWidth or 80
-            hintLabel:setSize(W, 1)
-            hintLabel:setText(fullText)
-            discountLabel:setVisible(false)
-            if cancelButton and cancelButton.setVisible then cancelButton:setVisible(true) end
+            -- Show cancel button
+            if cancelButton and cancelButton.setVisible then
+                cancelButton:setVisible(true)
+            end
         end
+
     elseif screen == 4 then
-        local W = monitorWidth or 80
-        hintLabel:setSize(W, 1)
-        hintLabel:setText(MSG.screen4_thanks)
-        discountLabel:setVisible(false)
-        if cancelButton and cancelButton.setVisible then cancelButton:setVisible(false) end
+        -- Screen 4: Thank you message
+        if contentLabels[contentFirstLine] then
+            contentLabels[contentFirstLine]:setText(config.MSG.screen4_thanks)
+            contentLabels[contentFirstLine]:setVisible(true)
+        end
+        -- Hide cancel button
+        if cancelButton and cancelButton.setVisible then
+            cancelButton:setVisible(false)
+        end
     end
 end
 
 -- Getters for UI components (for other modules)
 local function getFrame() return mainFrame end
 local function getCancelButton() return cancelButton end
-local function getHintLabel() return hintLabel end
+local function getHintLabel() return contentLabels[contentFirstLine] end  -- Return first content label for error messages
 
 return {
     init = init,
