@@ -53,7 +53,7 @@ MSG = {
   screen2_hint     = "RMB: select   LMB: go back",
   screen3_hint_select  = "RMB: select quantity   LMB: go back",
   screen3_base_price   = "Base price: %d spurs for %d units",
-  screen3_breakdown_line = "Price breakdown: %d × %d/%d = %d",
+  screen3_breakdown_line = "Price breakdown: %d * %d/%d = %d",
   screen3_discount_line = "Discount: -%d%% (%d spurs)",
   screen3_total_line = "Total: %d spurs",
   screen3_pedestal_instruction = "Use pedestals to change quantity",
