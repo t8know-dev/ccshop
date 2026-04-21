@@ -6,6 +6,7 @@ local logging, peripherals, config, state
 local pedestals
 local PEDESTALS = _G.PEDESTALS or {}
 local PARALLEL_RENDERING = _G.PARALLEL_RENDERING or false
+local _parallelBusy = false  -- prevent nested parallel.waitForAll calls
 
 -- Initialize module with dependencies
 local function init(loggingModule, peripheralsModule, configModule, stateModule)
@@ -75,7 +76,12 @@ end
 local function clearSinglePedestal(idx)
     if not pedestals then return end
     if not pedestals[idx] then return end
-    pcall(pedestals[idx].setItem, nil)
+    local ok, err = pcall(pedestals[idx].setItem, nil)
+    if not ok then
+        logging.writeLog("WARN", "Pedestal " .. idx .. " setItem failed: " .. tostring(err))
+    else
+        logging.writeLog("DEBUG", "Pedestal " .. idx .. " setItem succeeded")
+    end
     local ok1, err1 = pcall(pedestals[idx].setItemRendered, false)
     local ok2, err2 = pcall(pedestals[idx].setLabelRendered, false)
     if not ok1 then logging.writeLog("WARN", "Pedestal " .. idx .. " setItemRendered failed: " .. tostring(err1)) end
@@ -218,17 +224,57 @@ local function setPedestalOptionsParallel(options)
 
     if #allTasks > 0 then
         logging.writeLog("DEBUG", "Executing " .. #allTasks .. " tasks in parallel")
-        local ok, err = pcall(parallel.waitForAll, unpack(allTasks))
-        if not ok then
-            logging.writeLog("WARN", "Parallel execution failed: " .. tostring(err) .. ", executing sequentially")
-            for _, task in ipairs(allTasks) do
-                local taskOk, taskErr = pcall(task)
-                if not taskOk then
-                    logging.writeLog("WARN", "Fallback task failed: " .. tostring(taskErr))
-                end
+
+        -- Prevent nested parallel.waitForAll calls
+        logging.writeLog("DEBUG", "setPedestalOptionsParallel: _parallelBusy=" .. tostring(_parallelBusy))
+        if _parallelBusy then
+            logging.writeLog("WARN", "Parallel busy, falling back to sequential update")
+            sequentialPedestalUpdate(options)
+            return
+        end
+
+        _parallelBusy = true
+        local parallelCompleted = false
+        local timeout = 5  -- seconds timeout
+
+        -- Timeout task
+        local timeoutTask = function()
+            os.sleep(timeout)
+            if not parallelCompleted then
+                logging.writeLog("WARN", "Parallel update timeout after " .. timeout .. " seconds, falling back to sequential")
             end
         end
-        logging.writeLog("DEBUG", "Parallel pedestal update completed")
+
+        -- Main parallel execution task
+        local parallelTask = function()
+            local ok, err = pcall(parallel.waitForAll, unpack(allTasks))
+            parallelCompleted = true
+            if not ok then
+                logging.writeLog("WARN", "Parallel execution failed: " .. tostring(err) .. ", executing sequentially")
+                for _, task in ipairs(allTasks) do
+                    local taskOk, taskErr = pcall(task)
+                    if not taskOk then
+                        logging.writeLog("WARN", "Fallback task failed: " .. tostring(taskErr))
+                    end
+                end
+            else
+                logging.writeLog("DEBUG", "Parallel pedestal update completed successfully")
+            end
+        end
+
+        -- Run both tasks in parallel: timeout and parallel execution
+        local ok, err = pcall(parallel.waitForAny, timeoutTask, parallelTask)
+        if not ok then
+            logging.writeLog("WARN", "parallel.waitForAny failed: " .. tostring(err))
+        end
+
+        _parallelBusy = false
+
+        -- If parallel didn't complete (timeout triggered), run sequential fallback
+        if not parallelCompleted then
+            logging.writeLog("DEBUG", "Running sequential fallback after timeout")
+            sequentialPedestalUpdate(options)
+        end
     end
 end
 
@@ -273,18 +319,69 @@ local function clearPedestals()
             logging.writeLog("DEBUG", "Sequential clear completed")
         else
             logging.writeLog("DEBUG", "Executing " .. #clearTasks .. " clear tasks in parallel")
-            -- Execute all tasks in parallel with fallback
-            local ok, err = pcall(parallel.waitForAll, unpack(clearTasks))
+
+            -- Prevent nested parallel.waitForAll calls
+            logging.writeLog("DEBUG", "clearPedestals: _parallelBusy=" .. tostring(_parallelBusy))
+            if _parallelBusy then
+                logging.writeLog("WARN", "Parallel busy, falling back to sequential clear")
+                for _, task in ipairs(clearTasks) do
+                    local ok, err = pcall(task)
+                    if not ok then
+                        logging.writeLog("WARN", "Sequential clear task failed: " .. tostring(err))
+                    end
+                end
+                logging.writeLog("DEBUG", "Sequential clear completed (fallback due to busy)")
+                return
+            end
+
+            _parallelBusy = true
+            local parallelCompleted = false
+            local timeout = 5  -- seconds timeout
+
+            -- Timeout task
+            local timeoutTask = function()
+                os.sleep(timeout)
+                if not parallelCompleted then
+                    logging.writeLog("WARN", "Parallel clear timeout after " .. timeout .. " seconds, falling back to sequential")
+                end
+            end
+
+            -- Main parallel execution task
+            local parallelTask = function()
+                local ok, err = pcall(parallel.waitForAll, unpack(clearTasks))
+                parallelCompleted = true
+                if not ok then
+                    logging.writeLog("WARN", "Parallel execution failed: " .. tostring(err) .. ", executing sequentially")
+                    for _, task in ipairs(clearTasks) do
+                        local taskOk, taskErr = pcall(task)
+                        if not taskOk then
+                            logging.writeLog("WARN", "Fallback task failed: " .. tostring(taskErr))
+                        end
+                    end
+                else
+                    logging.writeLog("DEBUG", "Parallel clear completed successfully")
+                end
+            end
+
+            -- Run both tasks in parallel: timeout and parallel execution
+            local ok, err = pcall(parallel.waitForAny, timeoutTask, parallelTask)
             if not ok then
-                logging.writeLog("WARN", "Parallel execution failed: " .. tostring(err) .. ", executing sequentially")
+                logging.writeLog("WARN", "parallel.waitForAny failed: " .. tostring(err))
+            end
+
+            _parallelBusy = false
+
+            -- If parallel didn't complete (timeout triggered), run sequential fallback
+            if not parallelCompleted then
+                logging.writeLog("DEBUG", "Running sequential fallback after timeout")
                 for _, task in ipairs(clearTasks) do
                     local taskOk, taskErr = pcall(task)
                     if not taskOk then
                         logging.writeLog("WARN", "Fallback task failed: " .. tostring(taskErr))
                     end
                 end
+                logging.writeLog("DEBUG", "Sequential fallback completed")
             end
-            logging.writeLog("DEBUG", "Parallel clear completed")
         end
     end
 end
