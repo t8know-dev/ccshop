@@ -7,6 +7,7 @@ local monitorWidth, monitorHeight
 local contentLabels = {}  -- key = line number, value = label object
 local contentFirstLine = 2
 local contentLastLine = 9
+local spursToCoins = _G.spursToCoins
 
 -- Initialize module with dependencies
 local function init(loggingModule, peripheralsModule, configModule, stateModule, basaltModule)
@@ -210,6 +211,14 @@ local function updateUI()
             local discountPercent = state.getState("discountPercent") or 0
 
             if selectedMaterial and calculatedPrice and basePriceForQty then
+                -- Convert spurs to coin string
+                local coinText
+                if spursToCoins then
+                    coinText = spursToCoins(calculatedPrice)
+                else
+                    coinText = tostring(calculatedPrice) .. " spurs"
+                    logging.writeLog("WARN", "spursToCoins function not available, falling back to spurs")
+                end
                 local linesText = {
                     string.format(MSG.screen3_base_price,
                         selectedMaterial.basePrice, selectedMaterial.minQty),
@@ -219,7 +228,7 @@ local function updateUI()
                         discountPercent, basePriceForQty - calculatedPrice),
                     string.format(MSG.screen3_total_line, calculatedPrice),
                     "", -- empty line
-                    string.format(MSG.screen3_insert, calculatedPrice),
+                    string.format(MSG.screen3_insert, coinText),
                     MSG.screen3_pedestal_instruction
                 }
                 for offset, text in ipairs(linesText) do
