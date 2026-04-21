@@ -75,7 +75,7 @@ local function createUI()
     -- Header (top bar) - Lines 1-2 with larger font, centered
     headerLabel = mainFrame:addLabel()
         :setPosition(1,1):setSize(width,2)
-        :setBackground(colors.red):setForeground(colors.white):setTextScale(2)
+        :setBackground(colors.red):setForeground(colors.white):setFontSize(2)
         :setTextAlign("center")
         :setText(MSG.header)
     logging.writeLog("DEBUG", "Header label created (red background, scale 2)")
