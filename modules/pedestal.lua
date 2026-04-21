@@ -4,6 +4,8 @@
 
 local logging, peripherals, config, state
 local pedestals
+local PEDESTALS = PEDESTALS
+local PARALLEL_RENDERING = PARALLEL_RENDERING
 
 -- Initialize module with dependencies
 local function init(loggingModule, peripheralsModule, configModule, stateModule)
@@ -184,7 +186,12 @@ local function setPedestalOptionsParallel(options)
     for i, idx in ipairs(indices) do
         local opt = options[i]
         if opt then
-            table.insert(updateTasks, function() updateSinglePedestal(idx, opt) end)
+            table.insert(updateTasks, function()
+                local taskOk, taskErr = pcall(updateSinglePedestal, idx, opt)
+                if not taskOk then
+                    logging.writeLog("WARN", "updateSinglePedestal(" .. idx .. ") failed: " .. tostring(taskErr))
+                end
+            end)
         end
     end
 
@@ -194,7 +201,12 @@ local function setPedestalOptionsParallel(options)
     for _, idx in ipairs(indices) do usedLookup[idx] = true end
     for i = 1, #PEDESTALS do
         if not usedLookup[i] and pedestals[i] then
-            table.insert(clearTasks, function() clearSinglePedestal(i) end)
+            table.insert(clearTasks, function()
+                local taskOk, taskErr = pcall(clearSinglePedestal, i)
+                if not taskOk then
+                    logging.writeLog("WARN", "clearSinglePedestal(" .. i .. ") failed: " .. tostring(taskErr))
+                end
+            end)
         end
     end
 
@@ -210,7 +222,12 @@ local function setPedestalOptionsParallel(options)
         if not ok then
             logging.writeLog("WARN", "Parallel pedestal update failed: " .. tostring(err) .. ", falling back to sequential")
             -- Fallback to sequential execution
-            for _, task in ipairs(allTasks) do task() end
+            for _, task in ipairs(allTasks) do
+                local taskOk, taskErr = pcall(task)
+                if not taskOk then
+                    logging.writeLog("WARN", "Fallback pedestal task failed: " .. tostring(taskErr))
+                end
+            end
         else
             logging.writeLog("DEBUG", "Parallel pedestal update completed")
         end
@@ -235,19 +252,42 @@ local function clearPedestals()
     for i = 1, #PEDESTALS do
         if pedestals[i] then
             logging.writeLog("DEBUG", "Clearing pedestal " .. i)
-            table.insert(clearTasks, function() clearSinglePedestal(i) end)
+            table.insert(clearTasks, function()
+                local taskOk, taskErr = pcall(clearSinglePedestal, i)
+                if not taskOk then
+                    logging.writeLog("WARN", "clearSinglePedestal(" .. i .. ") failed: " .. tostring(taskErr))
+                end
+            end)
         end
     end
 
-    -- Execute in parallel with fallback
+    -- Execute in parallel with fallback if PARALLEL_RENDERING is enabled
+    local PARALLEL_RENDERING = PARALLEL_RENDERING
     if #clearTasks > 0 then
-        logging.writeLog("DEBUG", "Executing " .. #clearTasks .. " clear tasks in parallel")
-        local ok, err = pcall(parallel.waitForAll, unpack(clearTasks))
-        if not ok then
-            logging.writeLog("WARN", "Parallel clear failed: " .. tostring(err) .. ", falling back to sequential")
-            for _, task in ipairs(clearTasks) do task() end
+        if PARALLEL_RENDERING == false then
+            logging.writeLog("DEBUG", "PARALLEL_RENDERING is false, executing " .. #clearTasks .. " clear tasks sequentially")
+            for _, task in ipairs(clearTasks) do
+                local ok, err = pcall(task)
+                if not ok then
+                    logging.writeLog("WARN", "Sequential clear task failed: " .. tostring(err))
+                end
+            end
+            logging.writeLog("DEBUG", "Sequential clear completed")
         else
-            logging.writeLog("DEBUG", "Parallel clear completed")
+            logging.writeLog("DEBUG", "Executing " .. #clearTasks .. " clear tasks in parallel")
+            local ok, err = pcall(parallel.waitForAll, unpack(clearTasks))
+            if not ok then
+                logging.writeLog("WARN", "Parallel clear failed: " .. tostring(err) .. ", falling back to sequential")
+                for _, task in ipairs(clearTasks) do
+                    local taskOk, taskErr = pcall(task)
+                    if not taskOk then
+                        logging.writeLog("WARN", "Fallback clear task failed: " .. tostring(taskErr))
+                    end
+                end
+                logging.writeLog("DEBUG", "Fallback sequential clear completed")
+            else
+                logging.writeLog("DEBUG", "Parallel clear completed")
+            end
         end
     end
 end

@@ -34,7 +34,7 @@ AE2_CACHE_TTL    = 30     -- seconds before refreshing AE2 stock cache
 LOG_LEVEL = "DEBUG"
 
 -- Parallel rendering (true to enable parallel pedestal and UI updates)
-PARALLEL_RENDERING = true
+PARALLEL_RENDERING = false
 
 -- Messages (all in English, easy to edit)
 MSG = {

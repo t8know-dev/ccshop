@@ -25,7 +25,13 @@ end
 -- Screen 1: Category selection
 local function renderScreen1()
     logging.writeLog("INFO", "Rendering screen 1 (categories)")
-    pedestal.clearPedestals()
+    logging.writeLog("DEBUG", "Calling pedestal.clearPedestals()")
+    local ok, err = pcall(pedestal.clearPedestals)
+    if not ok then
+        logging.writeLog("ERROR", "pedestal.clearPedestals failed: " .. tostring(err))
+    else
+        logging.writeLog("DEBUG", "pedestal.clearPedestals completed successfully")
+    end
     local options = {}
     for _, cat in ipairs(CATEGORIES) do
         table.insert(options, { item = cat.item, label = cat.label })
