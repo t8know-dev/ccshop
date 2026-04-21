@@ -22,6 +22,28 @@ local function init(loggingModule, pedestalModule, uiModule, peripheralsModule, 
     logging.writeLog("DEBUG", "Screens init: MSG.error_deposit = " .. tostring(MSG.error_deposit))
 end
 
+-- Helper: execute UI and pedestal updates in parallel or sequential based on config
+local function executeParallelOrSequential(uiFunc, pedestalFunc)
+    local parallelRendering = config.get("PARALLEL_RENDERING")
+    logging.writeLog("DEBUG", "executeParallelOrSequential: PARALLEL_RENDERING=" .. tostring(parallelRendering))
+    if parallelRendering == false then
+        logging.writeLog("DEBUG", "Parallel rendering disabled, executing sequentially")
+        uiFunc()
+        pedestalFunc()
+        logging.writeLog("DEBUG", "Sequential execution completed")
+    else
+        logging.writeLog("DEBUG", "Attempting parallel execution")
+        local ok, err = pcall(parallel.waitForAll, uiFunc, pedestalFunc)
+        if not ok then
+            logging.writeLog("WARN", "Parallel render failed: " .. tostring(err) .. ", falling back to sequential")
+            uiFunc()
+            pedestalFunc()
+        else
+            logging.writeLog("DEBUG", "Parallel execution completed")
+        end
+    end
+end
+
 -- Screen 1: Category selection
 local function renderScreen1()
     logging.writeLog("INFO", "Rendering screen 1 (categories)")
@@ -36,27 +58,20 @@ local function renderScreen1()
     for _, cat in ipairs(CATEGORIES) do
         table.insert(options, { item = cat.item, label = cat.label })
     end
-    -- Update UI and pedestals in parallel
-    logging.writeLog("DEBUG", "Starting parallel UI and pedestal update for screen 1")
-    local ok, err = pcall(parallel.waitForAll,
+    -- Update UI and pedestals in parallel or sequential based on config
+    logging.writeLog("DEBUG", "Starting UI and pedestal update for screen 1")
+    executeParallelOrSequential(
         function()
-            logging.writeLog("DEBUG", "Parallel task 1: ui.updateUI()")
+            logging.writeLog("DEBUG", "UI update task")
             ui.updateUI()
-            logging.writeLog("DEBUG", "Parallel task 1 completed")
+            logging.writeLog("DEBUG", "UI update completed")
         end,
         function()
-            logging.writeLog("DEBUG", "Parallel task 2: pedestal.setPedestalOptions()")
+            logging.writeLog("DEBUG", "Pedestal update task")
             pedestal.setPedestalOptions(options)
-            logging.writeLog("DEBUG", "Parallel task 2 completed")
+            logging.writeLog("DEBUG", "Pedestal update completed")
         end
     )
-    if not ok then
-        logging.writeLog("WARN", "Parallel render failed: " .. tostring(err) .. ", falling back to sequential")
-        ui.updateUI()
-        pedestal.setPedestalOptions(options)
-    else
-        logging.writeLog("DEBUG", "Parallel render completed")
-    end
 end
 
 -- Screen 2: Material selection (filtered by category and stock)
@@ -90,16 +105,11 @@ local function renderScreen2()
         -- We'll call renderCurrentScreen via the main loop. For now, just update state.
         return
     end
-    -- Update UI and pedestals in parallel
-    local ok, err = pcall(parallel.waitForAll,
+    -- Update UI and pedestals in parallel or sequential based on config
+    executeParallelOrSequential(
         function() ui.updateUI() end,
         function() pedestal.setPedestalOptions(options) end
     )
-    if not ok then
-        logging.writeLog("WARN", "Parallel render failed: " .. tostring(err) .. ", falling back to sequential")
-        ui.updateUI()
-        pedestal.setPedestalOptions(options)
-    end
 end
 
 -- Screen 3: Quantity selection (selecting sub-state)
@@ -132,16 +142,11 @@ local function renderScreen3Selecting()
     for _, qtyNum in ipairs(quantities) do
         table.insert(options, { item = selectedMaterial.item, label = tostring(qtyNum), count = qtyNum })
     end
-    -- Update UI and pedestals in parallel
-    local ok, err = pcall(parallel.waitForAll,
+    -- Update UI and pedestals in parallel or sequential based on config
+    executeParallelOrSequential(
         function() ui.updateUI() end,
         function() pedestal.setPedestalOptions(options) end
     )
-    if not ok then
-        logging.writeLog("WARN", "Parallel render failed: " .. tostring(err) .. ", falling back to sequential")
-        ui.updateUI()
-        pedestal.setPedestalOptions(options)
-    end
 end
 
 -- Screen 3: Payment (confirming sub-state)
@@ -208,16 +213,11 @@ local function renderScreen3Confirming()
         })
     end
 
-    -- Update UI and pedestals in parallel
-    local ok, err = pcall(parallel.waitForAll,
+    -- Update UI and pedestals in parallel or sequential based on config
+    executeParallelOrSequential(
         function() ui.updateUI() end,
         function() pedestal.setPedestalOptions(options) end
     )
-    if not ok then
-        logging.writeLog("WARN", "Parallel render failed: " .. tostring(err) .. ", falling back to sequential")
-        ui.updateUI()
-        pedestal.setPedestalOptions(options)
-    end
 
     -- Update pedestal labels: selected quantity gets brackets
     local currentOptions = state.getState("currentOptions")
@@ -260,16 +260,11 @@ end
 
 -- Screen 4: Thank you
 local function renderScreen4()
-    -- Clear pedestals and update UI in parallel
-    local ok, err = pcall(parallel.waitForAll,
-        function() pedestal.clearPedestals() end,
-        function() ui.updateUI() end
+    -- Clear pedestals and update UI in parallel or sequential based on config
+    executeParallelOrSequential(
+        function() ui.updateUI() end,
+        function() pedestal.clearPedestals() end
     )
-    if not ok then
-        logging.writeLog("WARN", "Parallel clear/render failed: " .. tostring(err) .. ", falling back to sequential")
-        pedestal.clearPedestals()
-        ui.updateUI()
-    end
     -- Play noteblock sound
     peripherals.playNoteblockSoundHigh()
     -- Log purchase
