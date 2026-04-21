@@ -76,8 +76,14 @@ local function createUI()
     headerLabel = mainFrame:addLabel()
         :setPosition(1,1):setSize(width,2)
         :setBackground(colors.red):setForeground(colors.white)
-        :setTextAlign("center")
         :setText(MSG.header)
+    -- Try to center text
+    local alignOk, alignErr = pcall(function() headerLabel:setTextAlign("center") end)
+    if alignOk then
+        logging.writeLog("DEBUG", "Text centered")
+    else
+        logging.writeLog("WARN", "setTextAlign failed: " .. tostring(alignErr))
+    end
     -- Try to set font size safely
     local fontSizeOk, fontSizeErr = pcall(function() headerLabel:setFontSize(2) end)
     if fontSizeOk then
@@ -152,7 +158,7 @@ local function updateUI()
     local subState = state.getState("subState")
 
     -- Hide all content labels first
-    for line, label in pairs(contentLabels) do
+    for _, label in pairs(contentLabels) do
         if label and label.setVisible then
             label:setVisible(false)
         end
