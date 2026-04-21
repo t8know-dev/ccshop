@@ -11,7 +11,8 @@
       "Bash(done)",
       "Bash(find . -name \"*.lua\" -exec luac -p {})",
       "Bash(2)",
-      "Bash(echo \"Exit code: $?\")"
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(git rm:*)"
     ]
   }
 }
