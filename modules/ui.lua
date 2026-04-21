@@ -75,7 +75,7 @@ local function createUI()
     -- Header (top bar) - Line 1
     headerLabel = mainFrame:addLabel()
         :setPosition(1,1):setSize(width,1)
-        :setBackground(colors.red):setForeground(colors.white)
+        :setBackground(colors.red):setForeground(colors.white):setTextScale(1)
         :setText(MSG.header)
     logging.writeLog("DEBUG", "Header label created (red background)")
 
