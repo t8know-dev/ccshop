@@ -210,35 +210,23 @@ local function setPedestalOptionsParallel(options)
         end
     end
 
-    -- Execute tasks in parallel with batching to avoid hanging
+    -- Execute tasks in parallel
     logging.writeLog("DEBUG", "Created " .. #updateTasks .. " update tasks, " .. #clearTasks .. " clear tasks")
     local allTasks = {}
     for _, task in ipairs(updateTasks) do table.insert(allTasks, task) end
     for _, task in ipairs(clearTasks) do table.insert(allTasks, task) end
 
     if #allTasks > 0 then
-        -- Group tasks into batches of max 2 to avoid parallel.waitForAll hanging
-        local function executeTaskGroup(taskGroup)
-            local ok, err = pcall(parallel.waitForAll, unpack(taskGroup))
-            if not ok then
-                logging.writeLog("WARN", "Parallel task group failed: " .. tostring(err) .. ", executing sequentially")
-                for _, task in ipairs(taskGroup) do
-                    local taskOk, taskErr = pcall(task)
-                    if not taskOk then
-                        logging.writeLog("WARN", "Fallback task failed: " .. tostring(taskErr))
-                    end
+        logging.writeLog("DEBUG", "Executing " .. #allTasks .. " tasks in parallel")
+        local ok, err = pcall(parallel.waitForAll, unpack(allTasks))
+        if not ok then
+            logging.writeLog("WARN", "Parallel execution failed: " .. tostring(err) .. ", executing sequentially")
+            for _, task in ipairs(allTasks) do
+                local taskOk, taskErr = pcall(task)
+                if not taskOk then
+                    logging.writeLog("WARN", "Fallback task failed: " .. tostring(taskErr))
                 end
             end
-        end
-
-        logging.writeLog("DEBUG", "Executing " .. #allTasks .. " tasks in parallel (max 2 at a time)")
-        for i = 1, #allTasks, 2 do
-            local group = {}
-            for j = i, math.min(i + 1, #allTasks) do
-                table.insert(group, allTasks[j])
-            end
-            logging.writeLog("DEBUG", "Executing task group " .. math.ceil(i/2) .. " with " .. #group .. " tasks")
-            executeTaskGroup(group)
         end
         logging.writeLog("DEBUG", "Parallel pedestal update completed")
     end
@@ -284,29 +272,17 @@ local function clearPedestals()
             end
             logging.writeLog("DEBUG", "Sequential clear completed")
         else
-            logging.writeLog("DEBUG", "Executing " .. #clearTasks .. " clear tasks in parallel (max 2 at a time)")
-            -- Execute tasks in small groups to avoid hanging
-            local function executeTaskGroup(taskGroup)
-                local ok, err = pcall(parallel.waitForAll, unpack(taskGroup))
-                if not ok then
-                    logging.writeLog("WARN", "Parallel task group failed: " .. tostring(err) .. ", executing sequentially")
-                    for _, task in ipairs(taskGroup) do
-                        local taskOk, taskErr = pcall(task)
-                        if not taskOk then
-                            logging.writeLog("WARN", "Fallback task failed: " .. tostring(taskErr))
-                        end
+            logging.writeLog("DEBUG", "Executing " .. #clearTasks .. " clear tasks in parallel")
+            -- Execute all tasks in parallel with fallback
+            local ok, err = pcall(parallel.waitForAll, unpack(clearTasks))
+            if not ok then
+                logging.writeLog("WARN", "Parallel execution failed: " .. tostring(err) .. ", executing sequentially")
+                for _, task in ipairs(clearTasks) do
+                    local taskOk, taskErr = pcall(task)
+                    if not taskOk then
+                        logging.writeLog("WARN", "Fallback task failed: " .. tostring(taskErr))
                     end
                 end
-            end
-
-            -- Group tasks into batches of max 2
-            for i = 1, #clearTasks, 2 do
-                local group = {}
-                for j = i, math.min(i + 1, #clearTasks) do
-                    table.insert(group, clearTasks[j])
-                end
-                logging.writeLog("DEBUG", "Executing task group " .. math.ceil(i/2) .. " with " .. #group .. " tasks")
-                executeTaskGroup(group)
             end
             logging.writeLog("DEBUG", "Parallel clear completed")
         end

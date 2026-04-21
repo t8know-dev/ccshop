@@ -32,15 +32,12 @@ local function executeParallelOrSequential(uiFunc, pedestalFunc)
         pedestalFunc()
         logging.writeLog("DEBUG", "Sequential execution completed")
     else
-        logging.writeLog("DEBUG", "Attempting parallel execution")
-        local ok, err = pcall(parallel.waitForAll, uiFunc, pedestalFunc)
-        if not ok then
-            logging.writeLog("WARN", "Parallel render failed: " .. tostring(err) .. ", falling back to sequential")
-            uiFunc()
-            pedestalFunc()
-        else
-            logging.writeLog("DEBUG", "Parallel execution completed")
-        end
+        -- Run sequentially to avoid nested parallel.waitForAll calls
+        -- (pedestal functions internally use parallel rendering)
+        logging.writeLog("DEBUG", "Running UI then pedestal sequentially (internal parallel)")
+        uiFunc()
+        pedestalFunc()
+        logging.writeLog("DEBUG", "Sequential execution with internal parallel completed")
     end
 end
 

@@ -128,8 +128,6 @@ local function createUI()
     -- Cancel button (bottom-left corner) styled like cashier example
     local btnWidth = math.max(1, math.min(14, width - 4))  -- Fixed width 16, but ensure fits monitor, minimum 1
     local btnText = " " .. MSG.cancel_btn .. " "  -- Padded text
-    -- Store reference to updateUI function for use in onClick closure
-    local updateUIFunc = updateUI
     cancelButton = mainFrame:addButton()
         :setText(btnText)
         :setPosition(2, height - 3)  -- Bottom-left with margin
@@ -147,8 +145,7 @@ local function createUI()
             logging.writeLog("DEBUG", "Cancel button clicked, resetting to main screen")
             -- Reset to main screen
             state.resetToMainScreen()
-            -- Immediately update UI to reflect screen 1 (hide cancel button, show categories)
-            updateUIFunc()
+            -- UI will be updated by state subscriber triggering renderCurrentScreen
             logging.writeLog("DEBUG", "Cancel button onClick handler finished")
         end)
     logging.writeLog("DEBUG", "Cancel button created: " .. tostring(cancelButton) .. " at line " .. (height - 3))
