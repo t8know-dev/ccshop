@@ -75,10 +75,19 @@ local function createUI()
     -- Header (top bar) - Lines 1-2 with larger font, centered
     headerLabel = mainFrame:addLabel()
         :setPosition(1,1):setSize(width,2)
-        :setBackground(colors.red):setForeground(colors.white):setFontSize(2)
+        :setBackground(colors.red):setForeground(colors.white)
         :setTextAlign("center")
         :setText(MSG.header)
-    logging.writeLog("DEBUG", "Header label created (red background, scale 2)")
+    -- Try to set font size safely
+    local fontSizeOk, fontSizeErr = pcall(function() headerLabel:setFontSize(2) end)
+    if fontSizeOk then
+        logging.writeLog("DEBUG", "Header label created with font size 2")
+    else
+        logging.writeLog("WARN", "setFontSize failed: " .. tostring(fontSizeErr))
+        -- Fallback: increase label height for larger appearance
+        headerLabel:setSize(width, 3)
+        logging.writeLog("DEBUG", "Header label fallback to height 3")
+    end
 
     -- Determine starting line for content based on available space
     -- We want a gap line between header and content if monitor is tall enough
