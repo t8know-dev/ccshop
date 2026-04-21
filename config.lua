@@ -3,11 +3,9 @@
 
 -- Peripheral names (update to match your setup)
 RELAY_LOCK     = "redstone_relay_38"
-AE2_ADAPTER    = "ae2cc_adapter_12"
+AE2_ADAPTER    = "ae2cc_adapter_14"
 DEPOSITOR      = "Numismatics_Depositor_8"
-RELAY_NOTE     = "redstone_relay_37"
-RELAY_NOTE_HIGH_FACE = "front"
-RELAY_NOTE_LOW_FACE  = "top"
+SPEAKER_NAME   = "speaker_212"
 MONITOR        = "monitor_1012"
 
 -- Pedestal list: left→right display order; script centers options
@@ -73,7 +71,7 @@ function validatePeripherals()
     { name = RELAY_LOCK,  type = "redstone_relay" },
     { name = AE2_ADAPTER, type = "ae2cc_adapter" },
     { name = DEPOSITOR,   type = "Numismatics_Depositor" },
-    { name = RELAY_NOTE,  type = "redstone_relay" },
+    { name = SPEAKER_NAME, type = "speaker" },
   }
   for _, p in ipairs(peripherals) do
     local ok, wrapped = pcall(peripheral.wrap, p.name)

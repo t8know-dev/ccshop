@@ -48,14 +48,14 @@ The shop operates as a four‑screen state machine with Screen 3 having two su
    - **3A: Selecting a quantity** — Pedestals show available quantity tiers (from `minQty` up to AE2 stock). Right‑click chooses a quantity, left‑click returns to material selection. Cancel button visible.
    - **3B: Awaiting payment** — Triggered immediately after quantity selection. Selected pedestal label changes to `"[<qty>]"`. Depositor is configured and unlocked. Monitor shows calculated price and insert instruction. Cancel button visible.
 
-4. **Thank‑you screen** — Plays a noteblock sound, logs the purchase, mocks item dispensing, and auto‑returns to screen 1 after `CONFIRM_DELAY` seconds. No cancel button.
+4. **Thank‑you screen** — Plays a harp sound, logs the purchase, mocks item dispensing, and auto‑returns to screen 1 after `CONFIRM_DELAY` seconds. No cancel button.
 
 ### Peripheral Integration
 
 - **Display pedestals** (Pedestals mod) — Show items/labels, receive `pedestal_left_click`/`pedestal_right_click` events.
 - **AE2 adapter** (`ae2cc_adapter`) — Queries available stock for material items.
 - **Numismatics depositor** — Accepts spur currency, signals payment via redstone relay.
-- **Redstone relays** — One locks/unlocks the depositor, another triggers a noteblock.
+- **Speaker** (`speaker_212`) — Plays harp sound for selection confirm (right‑click) and bass sound for cancel/back actions (left‑click, cancel button).
 - **Monitor** — Shows Basalt UI with header, hint line, and cancel button.
 
 ### Concurrency
@@ -146,7 +146,7 @@ local state = {
 ## Configuration Files
 
 ### `config.lua`
-- Peripheral name constants (`RELAY_LOCK`, `AE2_ADAPTER`, `DEPOSITOR`, `RELAY_NOTE`, `MONITOR`, `PEDESTALS`).
+- Peripheral name constants (`RELAY_LOCK`, `AE2_ADAPTER`, `DEPOSITOR`, `SPEAKER_NAME`, `MONITOR`, `PEDESTALS`).
 - Timing constants (`IDLE_TIMEOUT`, `CONFIRM_DELAY`).
 - UI message table (`MSG`) with required keys:
   ```lua

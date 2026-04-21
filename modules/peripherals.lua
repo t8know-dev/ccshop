@@ -3,12 +3,12 @@
 --          playNoteblockSoundLow(), playNoteblockSound() [deprecated],
 --          getAllRelayInputs(), debugRelayInputs(), lockDepositor(), unlockDepositor(),
 --          getPedestals(), getPedestalIndexByName(), getPedestalObjectToIndex(),
---          getRelayLock(), getAe2Adapter(), getDepositor(), getRelayNote(), getMonitor()
+--          getRelayLock(), getAe2Adapter(), getDepositor(), getSpeaker(), getMonitor()
 
 local logging, config
 
 -- Peripheral wrappers & cache
-local relayLock, ae2Adapter, depositor, relayNote, monitor, pedestals
+local relayLock, ae2Adapter, depositor, speaker, monitor, pedestals
 local pedestalIndexByName, pedestalObjectToIndex
 local ae2Cache = {
     timestamp = 0,
@@ -35,8 +35,8 @@ local function initPeripherals()
     logging.writeLog("DEBUG", "AE2_ADAPTER wrapped: " .. tostring(ae2Adapter) .. " (name: " .. AE2_ADAPTER .. ")")
     depositor = peripheral.wrap(DEPOSITOR)
     logging.writeLog("DEBUG", "DEPOSITOR wrapped: " .. tostring(depositor))
-    relayNote = peripheral.wrap(RELAY_NOTE)
-    logging.writeLog("DEBUG", "RELAY_NOTE wrapped: " .. tostring(relayNote))
+    speaker = peripheral.wrap(SPEAKER_NAME)
+    logging.writeLog("DEBUG", "SPEAKER wrapped: " .. tostring(speaker))
     monitor = peripheral.wrap(MONITOR)
     logging.writeLog("DEBUG", "MONITOR wrapped: " .. tostring(monitor))
     pedestals = {}
@@ -131,22 +131,24 @@ local function getAE2Stock(itemName)
     return 0
 end
 
--- Helper: play noteblock high sound (front face) - selection confirm
+-- Helper: play noteblock high sound (harp F) - selection confirm
 local function playNoteblockSoundHigh()
-    local highFace = RELAY_NOTE_HIGH_FACE or "front"
-    logging.writeLog("DEBUG", "Playing noteblock high sound on " .. highFace)
-    pcall(relayNote.setOutput, highFace, true)
-    os.sleep(0.05)
-    pcall(relayNote.setOutput, highFace, false)
+    logging.writeLog("DEBUG", "Playing high sound: harp F")
+    if speaker and speaker.playNote then
+        pcall(speaker.playNote, "harp", 1.0, 11)  -- harp instrument, volume 1.0, pitch 11 (F note)
+    else
+        logging.writeLog("WARN", "Speaker not available or missing playNote method")
+    end
 end
 
--- Helper: play noteblock low sound (top face) - go back / cancel
+-- Helper: play noteblock low sound (bass F) - go back / cancel
 local function playNoteblockSoundLow()
-    local lowFace = RELAY_NOTE_LOW_FACE or "top"
-    logging.writeLog("DEBUG", "Playing noteblock low sound on " .. lowFace)
-    pcall(relayNote.setOutput, lowFace, true)
-    os.sleep(0.05)
-    pcall(relayNote.setOutput, lowFace, false)
+    logging.writeLog("DEBUG", "Playing low sound: bass F")
+    if speaker and speaker.playNote then
+        pcall(speaker.playNote, "bass", 1.0, 11)  -- bass instrument, volume 1.0, pitch 11 (F note)
+    else
+        logging.writeLog("WARN", "Speaker not available or missing playNote method")
+    end
 end
 
 -- Legacy alias for backward compatibility (calls high sound)
@@ -206,7 +208,7 @@ local function getPedestalObjectToIndex() return pedestalObjectToIndex end
 local function getRelayLock() return relayLock end
 local function getAe2Adapter() return ae2Adapter end
 local function getDepositor() return depositor end
-local function getRelayNote() return relayNote end
+local function getSpeaker() return speaker end
 local function getMonitor() return monitor end
 
 return {
@@ -227,6 +229,6 @@ return {
     getRelayLock = getRelayLock,
     getAe2Adapter = getAe2Adapter,
     getDepositor = getDepositor,
-    getRelayNote = getRelayNote,
+    getSpeaker = getSpeaker,
     getMonitor = getMonitor
 }
