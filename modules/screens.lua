@@ -293,11 +293,13 @@ end
 
 -- Rendering guard to prevent re-entrant rendering
 local _rendering = false
+local _pendingRender = false
 
 -- Update screen based on state
 local function renderCurrentScreen()
     if _rendering then
-        logging.writeLog("WARN", "renderCurrentScreen called while already rendering, skipping")
+        _pendingRender = true
+        logging.writeLog("WARN", "renderCurrentScreen called while already rendering, queuing re-render")
         return
     end
     _rendering = true
@@ -319,6 +321,11 @@ local function renderCurrentScreen()
     _rendering = false
     if not ok then
         logging.writeLog("ERROR", "renderCurrentScreen failed: " .. tostring(err))
+    end
+    -- Re-render if a state change was queued during rendering
+    if _pendingRender then
+        _pendingRender = false
+        renderCurrentScreen()
     end
 end
 
