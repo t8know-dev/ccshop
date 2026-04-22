@@ -292,26 +292,33 @@ local function renderScreen4()
 end
 
 -- Rendering guard: prevents re-entrant rendering.
--- When renderCurrentScreen is called while already rendering (e.g. cancel
--- button click during parallel pedestal updates), it spins with os.sleep(0)
--- until the current rendering completes, then proceeds with the new state.
--- The pedestal event loop re-queues non-timer events so Basalt can process
--- them (cancel button works). The spin is brief (~ms) because pedestal
--- peripheral calls are fast and run in parallel.
+-- When renderCurrentScreen is called while already rendering, we queue a
+-- pending render and skip the call. After the current render completes,
+-- we process the pending render to ensure no state change is missed.
 local _rendering = false
+local _pendingRender = false
+local _lastRenderedScreen = nil
+local _lastRenderedSubState = nil
 
 -- Update screen based on state
 local function renderCurrentScreen()
-    -- Wait for any in-progress rendering to complete
-    while _rendering do
-        os.sleep(0)
+    -- If already rendering, mark pending and skip to avoid recursion
+    if _rendering then
+        logging.writeLog("WARN", "renderCurrentScreen called while already rendering, queuing pending render")
+        _pendingRender = true
+        return
+    end
+    -- Check if the screen/subState actually changed since last render
+    local screen = state.getState("screen")
+    local subState = state.getState("subState")
+    if screen == _lastRenderedScreen and subState == _lastRenderedSubState then
+        logging.writeLog("DEBUG", "renderCurrentScreen: screen/subState unchanged, skipping render")
+        return
     end
     _rendering = true
     local ok, err = pcall(function()
-        logging.writeLog("INFO", "renderCurrentScreen called - screen=" .. tostring(state.getState("screen")) .. " subState=" .. tostring(state.getState("subState")))
+        logging.writeLog("INFO", "renderCurrentScreen called - screen=" .. tostring(screen) .. " subState=" .. tostring(subState))
         state.updateState({ lastActivity = os.clock() })
-        local screen = state.getState("screen")
-        local subState = state.getState("subState")
         if screen == 1 then renderScreen1()
         elseif screen == 2 then renderScreen2()
         elseif screen == 3 then
@@ -321,8 +328,18 @@ local function renderCurrentScreen()
             end
         elseif screen == 4 then renderScreen4()
         end
+        -- Remember what we just rendered
+        _lastRenderedScreen = screen
+        _lastRenderedSubState = subState
     end)
     _rendering = false
+    -- After rendering completes, check if a pending render was requested
+    if _pendingRender then
+        logging.writeLog("INFO", "Processing pending render after completion")
+        _pendingRender = false
+        -- Use pcall to avoid errors in pending render breaking the loop
+        pcall(renderCurrentScreen)
+    end
     if not ok then
         pcall(logging.writeLog, "ERROR", "renderCurrentScreen failed: " .. tostring(err))
     end
