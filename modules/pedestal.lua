@@ -5,6 +5,7 @@
 local logging, peripherals, config, state
 local pedestals
 local PEDESTALS = _G.PEDESTALS or {}
+local parallel = _G.parallel
 
 -- Initialize module with dependencies
 local function init(loggingModule, peripheralsModule, configModule, stateModule)
@@ -58,64 +59,73 @@ local function centerPedestalIndices(numOptions)
     return indices
 end
 
--- Update pedestals with centered options
+-- Update pedestals with centered options (parallel)
+-- Each pedestal runs in its own coroutine for better responsiveness.
+-- os.sleep(0) yields control so the top-level scheduler can interleave.
 local function updatePedestals(options)
     local indices = centerPedestalIndices(#options)
-    -- Update used pedestals
+    local tasks = {}
+
+    -- Add tasks for used pedestals
     for i, idx in ipairs(indices) do
         local opt = options[i]
         if opt and pedestals[idx] then
-            -- logging.writeLog("DEBUG", "Setting pedestal " .. idx .. " with item=" .. tostring(opt.item) .. " label=" .. tostring(opt.label) .. " count=" .. tostring(opt.count))
-            -- Set item with optional label (count takes precedence over label)
             local label = opt.count and tostring(opt.count) or opt.label
-            if opt.item then
-                if label then
-                    -- logging.writeLog("DEBUG", "  setItem: " .. opt.item .. " label: " .. label)
-                    local ok, err = pcall(pedestals[idx].setItem, opt.item, label)
-                    if not ok then logging.writeLog("WARN", "    setItem with label failed: " .. tostring(err)) end
+            table.insert(tasks, function()
+                if opt.item then
+                    if label then
+                        local ok, err = pcall(pedestals[idx].setItem, opt.item, label)
+                        if not ok then logging.writeLog("WARN", "    setItem with label failed: " .. tostring(err)) end
+                    else
+                        local ok, err = pcall(pedestals[idx].setItem, opt.item)
+                        if not ok then logging.writeLog("WARN", "    setItem failed: " .. tostring(err)) end
+                    end
+                    local ok2, err2 = pcall(pedestals[idx].setItemRendered, true)
+                    if not ok2 then logging.writeLog("WARN", "    setItemRendered failed: " .. tostring(err2)) end
+                    if label then
+                        local ok3, err3 = pcall(pedestals[idx].setLabelRendered, true)
+                        if not ok3 then logging.writeLog("WARN", "    setLabelRendered failed: " .. tostring(err3)) end
+                    else
+                        local ok3, err3 = pcall(pedestals[idx].setLabelRendered, false)
+                        if not ok3 then logging.writeLog("WARN", "    setLabelRendered(false) failed: " .. tostring(err3)) end
+                    end
                 else
-                    -- logging.writeLog("DEBUG", "  setItem: " .. opt.item)
-                    local ok, err = pcall(pedestals[idx].setItem, opt.item)
-                    if not ok then logging.writeLog("WARN", "    setItem failed: " .. tostring(err)) end
+                    pcall(pedestals[idx].setItem, "minecraft:air")
+                    local ok, err = pcall(pedestals[idx].setItemRendered, false)
+                    if not ok then logging.writeLog("WARN", "    setItemRendered(false) failed: " .. tostring(err)) end
+                    local ok2, err2 = pcall(pedestals[idx].setLabelRendered, false)
+                    if not ok2 then logging.writeLog("WARN", "    setLabelRendered(false) failed: " .. tostring(err2)) end
                 end
-                local ok2, err2 = pcall(pedestals[idx].setItemRendered, true)
-                if not ok2 then logging.writeLog("WARN", "    setItemRendered failed: " .. tostring(err2)) end
-                -- Keep label rendering separate (optional)
-                if label then
-                    local ok3, err3 = pcall(pedestals[idx].setLabelRendered, true)
-                    if not ok3 then logging.writeLog("WARN", "    setLabelRendered failed: " .. tostring(err3)) end
-                else
-                    local ok3, err3 = pcall(pedestals[idx].setLabelRendered, false)
-                    if not ok3 then logging.writeLog("WARN", "    setLabelRendered(false) failed: " .. tostring(err3)) end
-                end
-            else
-                -- logging.writeLog("DEBUG", "  setItem: nil")
-                pcall(pedestals[idx].setItem, "minecraft:air")
-                local ok, err = pcall(pedestals[idx].setItemRendered, false)
-                if not ok then logging.writeLog("WARN", "    setItemRendered(false) failed: " .. tostring(err)) end
-                local ok2, err2 = pcall(pedestals[idx].setLabelRendered, false)
-                if not ok2 then logging.writeLog("WARN", "    setLabelRendered(false) failed: " .. tostring(err2)) end
-            end
+                os.sleep(0)  -- Yield to allow interleaving
+            end)
         end
     end
-    -- Clear unused pedestals
+
+    -- Add tasks for unused pedestals (clear them)
     for i = 1, #PEDESTALS do
         local used = false
         for _, idx in ipairs(indices) do
             if i == idx then used = true break end
         end
         if not used and pedestals[i] then
-            -- logging.writeLog("DEBUG", "Clearing unused pedestal " .. i)
-            pcall(pedestals[i].setItem, "minecraft:air")
-            local ok1, err1 = pcall(pedestals[i].setItemRendered, false)
-            local ok2, err2 = pcall(pedestals[i].setLabelRendered, false)
-            if not ok1 then logging.writeLog("WARN", "  setItemRendered(false) failed: " .. tostring(err1)) end
-            if not ok2 then logging.writeLog("WARN", "  setLabelRendered(false) failed: " .. tostring(err2)) end
+            table.insert(tasks, function()
+                pcall(pedestals[i].setItem, "minecraft:air")
+                local ok1, err1 = pcall(pedestals[i].setItemRendered, false)
+                local ok2, err2 = pcall(pedestals[i].setLabelRendered, false)
+                if not ok1 then logging.writeLog("WARN", "  setItemRendered(false) failed: " .. tostring(err1)) end
+                if not ok2 then logging.writeLog("WARN", "  setLabelRendered(false) failed: " .. tostring(err2)) end
+                os.sleep(0)  -- Yield to allow interleaving
+            end)
         end
+    end
+
+    -- Run all pedestal operations in parallel
+    if #tasks > 0 then
+        parallel.waitForAll(table.unpack(tasks))
     end
 end
 
--- Helper: clear pedestals (remove items and labels)
+-- Helper: clear pedestals (remove items and labels) in parallel
 local function clearPedestals()
     if not pedestals then
         logging.writeLog("WARN", "pedestals not initialized, skipping clear")
@@ -127,18 +137,25 @@ local function clearPedestals()
         currentPedestalIndices = {},
         lastSelectedPedestal = nil
     })
-    -- Clear all pedestals sequentially
+    -- Clear all pedestals in parallel
+    local tasks = {}
     for i = 1, #PEDESTALS do
         if pedestals[i] then
-            local ok, err = pcall(pedestals[i].setItem, "minecraft:air")
-            if not ok then
-                logging.writeLog("WARN", "Pedestal " .. i .. " setItem failed: " .. tostring(err))
-            end
-            local ok1, err1 = pcall(pedestals[i].setItemRendered, false)
-            local ok2, err2 = pcall(pedestals[i].setLabelRendered, false)
-            if not ok1 then logging.writeLog("WARN", "Pedestal " .. i .. " setItemRendered failed: " .. tostring(err1)) end
-            if not ok2 then logging.writeLog("WARN", "Pedestal " .. i .. " setLabelRendered failed: " .. tostring(err2)) end
+            table.insert(tasks, function()
+                local ok, err = pcall(pedestals[i].setItem, "minecraft:air")
+                if not ok then
+                    logging.writeLog("WARN", "Pedestal " .. i .. " setItem failed: " .. tostring(err))
+                end
+                local ok1, err1 = pcall(pedestals[i].setItemRendered, false)
+                local ok2, err2 = pcall(pedestals[i].setLabelRendered, false)
+                if not ok1 then logging.writeLog("WARN", "Pedestal " .. i .. " setItemRendered failed: " .. tostring(err1)) end
+                if not ok2 then logging.writeLog("WARN", "Pedestal " .. i .. " setLabelRendered failed: " .. tostring(err2)) end
+                os.sleep(0)  -- Yield to allow interleaving
+            end)
         end
+    end
+    if #tasks > 0 then
+        parallel.waitForAll(table.unpack(tasks))
     end
 end
 
