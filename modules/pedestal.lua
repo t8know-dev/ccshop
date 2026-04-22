@@ -171,9 +171,11 @@ end
 -- Parallel version of setPedestalOptions
 local function setPedestalOptionsParallel(options)
     -- If parallel rendering disabled, fallback to sequential
+    logging.writeLog("INFO", "setPedestalOptionsParallel: options=" .. #options .. ", PARALLEL_RENDERING=" .. tostring(PARALLEL_RENDERING) .. ", _parallelBusy=" .. tostring(_parallelBusy))
     -- logging.writeLog("DEBUG", "setPedestalOptionsParallel: " .. #options .. " options, PARALLEL_RENDERING=" .. tostring(PARALLEL_RENDERING))
     if PARALLEL_RENDERING == false then
         sequentialPedestalUpdate(options)
+        _parallelBusy = false  -- Ensure flag is cleared when parallel rendering is disabled
         return
     end
     -- Same state tracking as original
@@ -238,14 +240,14 @@ local function setPedestalOptionsParallel(options)
         -- Prevent nested parallel.waitForAll calls
         -- logging.writeLog("DEBUG", "setPedestalOptionsParallel: _parallelBusy=" .. tostring(_parallelBusy))
         if _parallelBusy then
-            logging.writeLog("WARN", "Parallel busy, falling back to sequential update")
+            logging.writeLog("DEBUG", "Parallel busy, falling back to sequential update")
             sequentialPedestalUpdate(options)
             return
         end
 
         _parallelBusy = true
         local parallelCompleted = false
-        local timeout = 2  -- seconds timeout (reduced from 5)
+        local timeout = 1  -- seconds timeout (reduced from 2)
 
         -- Timeout task
         local timeoutTask = function()
@@ -327,6 +329,7 @@ local function clearPedestals()
 
     -- Execute in parallel with fallback if PARALLEL_RENDERING is enabled
     local parallelRendering = PARALLEL_RENDERING
+    logging.writeLog("INFO", "clearPedestals: PARALLEL_RENDERING=" .. tostring(PARALLEL_RENDERING) .. ", _parallelBusy=" .. tostring(_parallelBusy))
     -- logging.writeLog("DEBUG", "clearPedestals: PARALLEL_RENDERING = " .. tostring(PARALLEL_RENDERING) .. ", parallelRendering = " .. tostring(parallelRendering))
     if #clearTasks > 0 then
         if parallelRendering == false then
@@ -337,6 +340,7 @@ local function clearPedestals()
                     logging.writeLog("WARN", "Sequential clear task failed: " .. tostring(err))
                 end
             end
+            _parallelBusy = false  -- Ensure flag is cleared when parallel rendering is disabled
             -- logging.writeLog("DEBUG", "Sequential clear completed")
         else
             -- logging.writeLog("DEBUG", "Executing " .. #clearTasks .. " clear tasks in parallel")
@@ -345,7 +349,7 @@ local function clearPedestals()
             -- Prevent nested parallel.waitForAll calls
             -- logging.writeLog("DEBUG", "clearPedestals: _parallelBusy=" .. tostring(_parallelBusy))
             if _parallelBusy then
-                logging.writeLog("WARN", "Parallel busy, falling back to sequential clear")
+                logging.writeLog("DEBUG", "Parallel busy, falling back to sequential clear")
                 for _, task in ipairs(clearTasks) do
                     local ok, err = pcall(task)
                     if not ok then
@@ -360,7 +364,7 @@ local function clearPedestals()
             _parallelBusy = true
             -- logging.writeLog("DEBUG", "clearPedestals: _parallelBusy set, clearTasks count = " .. #clearTasks)
             local parallelCompleted = false
-            local timeout = 2  -- seconds timeout (reduced from 5)
+            local timeout = 1  -- seconds timeout (reduced from 2)
 
             -- Timeout task
             local timeoutTask = function()
