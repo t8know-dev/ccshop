@@ -302,15 +302,23 @@ local _lastRenderedSubState = nil
 
 -- Update screen based on state
 local function renderCurrentScreen()
-    -- If already rendering, mark pending and skip to avoid recursion
-    if _rendering then
-        logging.writeLog("WARN", "renderCurrentScreen called while already rendering, queuing pending render")
-        _pendingRender = true
-        return
-    end
-    -- Check if the screen/subState actually changed since last render
     local screen = state.getState("screen")
     local subState = state.getState("subState")
+
+    -- If already rendering, check if screen/subState actually changed
+    if _rendering then
+        -- Only queue a pending render if the screen or subState will be different
+        -- from what was last rendered (or is currently being rendered)
+        if screen ~= _lastRenderedScreen or subState ~= _lastRenderedSubState then
+            logging.writeLog("WARN", "renderCurrentScreen called while already rendering, queuing pending render")
+            _pendingRender = true
+        else
+            logging.writeLog("DEBUG", "renderCurrentScreen called while already rendering, but screen/subState unchanged, skipping")
+        end
+        return
+    end
+
+    -- Check if the screen/subState actually changed since last render
     if screen == _lastRenderedScreen and subState == _lastRenderedSubState then
         logging.writeLog("DEBUG", "renderCurrentScreen: screen/subState unchanged, skipping render")
         return
