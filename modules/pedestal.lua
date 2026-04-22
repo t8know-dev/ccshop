@@ -58,62 +58,110 @@ local function centerPedestalIndices(numOptions)
     return indices
 end
 
--- Update pedestals with centered options (sequential, no yielding)
--- Peripheral calls (setItem, setItemRendered, setLabelRendered) are fast
--- and non-blocking. No yielding between pedestals means rendering is
--- atomic — it completes in one time slice. This eliminates the window
--- where events could arrive during rendering (e.g. cancel button clicks),
--- avoiding the need for re-entrant rendering guards or deferred re-renders.
-local function updatePedestals(options)
-    local indices = centerPedestalIndices(#options)
-    -- Update used pedestals
-    for i, idx in ipairs(indices) do
-        local opt = options[i]
-        if opt and pedestals[idx] then
-            local label = opt.count and tostring(opt.count) or opt.label
-            if opt.item then
-                if label then
-                    local ok, err = pcall(pedestals[idx].setItem, opt.item, label)
-                    if not ok then logging.writeLog("WARN", "    setItem with label failed: " .. tostring(err)) end
-                else
-                    local ok, err = pcall(pedestals[idx].setItem, opt.item)
-                    if not ok then logging.writeLog("WARN", "    setItem failed: " .. tostring(err)) end
-                end
-                local ok2, err2 = pcall(pedestals[idx].setItemRendered, true)
-                if not ok2 then logging.writeLog("WARN", "    setItemRendered failed: " .. tostring(err2)) end
-                if label then
-                    local ok3, err3 = pcall(pedestals[idx].setLabelRendered, true)
-                    if not ok3 then logging.writeLog("WARN", "    setLabelRendered failed: " .. tostring(err3)) end
-                else
-                    local ok3, err3 = pcall(pedestals[idx].setLabelRendered, false)
-                    if not ok3 then logging.writeLog("WARN", "    setLabelRendered(false) failed: " .. tostring(err3)) end
-                end
+-- Run a list of task functions in parallel using manual coroutine management.
+-- Re-queues non-timer events so other top-level coroutines (Basalt) can
+-- process them. This avoids the nested parallel.waitForAll problem where
+-- events (monitor_touch for cancel button, pedestal clicks) get consumed
+-- by the inner event loop and lost.
+local function runPedestalTasksParallel(tasks)
+    if #tasks == 0 then return end
+
+    local coros = {}
+    for _, task in ipairs(tasks) do
+        coros[coroutine.create(task)] = true
+    end
+
+    while next(coros) do
+        local event = {os.pullEventRaw()}
+
+        -- Re-queue non-timer events before resuming coroutines.
+        -- This preserves events for other top-level coroutines (Basalt).
+        if event[1] ~= "timer" then
+            os.queueEvent(table.unpack(event))
+        end
+
+        -- Resume all coroutines with the event
+        for co in pairs(coros) do
+            if coroutine.status(co) == "dead" then
+                coros[co] = nil
             else
-                pcall(pedestals[idx].setItem, "minecraft:air")
-                local ok, err = pcall(pedestals[idx].setItemRendered, false)
-                if not ok then logging.writeLog("WARN", "    setItemRendered(false) failed: " .. tostring(err)) end
-                local ok2, err2 = pcall(pedestals[idx].setLabelRendered, false)
-                if not ok2 then logging.writeLog("WARN", "    setLabelRendered(false) failed: " .. tostring(err2)) end
+                local ok, err = coroutine.resume(co, table.unpack(event))
+                if not ok then
+                    logging.writeLog("ERROR", "Pedestal coroutine failed: " .. tostring(err))
+                    coros[co] = nil
+                elseif coroutine.status(co) == "dead" then
+                    coros[co] = nil
+                end
             end
         end
     end
-    -- Clear unused pedestals
+end
+
+-- Update pedestals with centered options (parallel)
+-- Each pedestal runs in its own coroutine for better responsiveness.
+-- Non-timer events are re-queued so the cancel button still works.
+local function updatePedestals(options)
+    local indices = centerPedestalIndices(#options)
+    local tasks = {}
+
+    -- Add tasks for used pedestals
+    for i, idx in ipairs(indices) do
+        local opt = options[i]
+        if opt and pedestals[idx] then
+            table.insert(tasks, function()
+                local label = opt.count and tostring(opt.count) or opt.label
+                if opt.item then
+                    if label then
+                        local ok, err = pcall(pedestals[idx].setItem, opt.item, label)
+                        if not ok then logging.writeLog("WARN", "    setItem with label failed: " .. tostring(err)) end
+                    else
+                        local ok, err = pcall(pedestals[idx].setItem, opt.item)
+                        if not ok then logging.writeLog("WARN", "    setItem failed: " .. tostring(err)) end
+                    end
+                    local ok2, err2 = pcall(pedestals[idx].setItemRendered, true)
+                    if not ok2 then logging.writeLog("WARN", "    setItemRendered failed: " .. tostring(err2)) end
+                    if label then
+                        local ok3, err3 = pcall(pedestals[idx].setLabelRendered, true)
+                        if not ok3 then logging.writeLog("WARN", "    setLabelRendered failed: " .. tostring(err3)) end
+                    else
+                        local ok3, err3 = pcall(pedestals[idx].setLabelRendered, false)
+                        if not ok3 then logging.writeLog("WARN", "    setLabelRendered(false) failed: " .. tostring(err3)) end
+                    end
+                else
+                    pcall(pedestals[idx].setItem, "minecraft:air")
+                    local ok, err = pcall(pedestals[idx].setItemRendered, false)
+                    if not ok then logging.writeLog("WARN", "    setItemRendered(false) failed: " .. tostring(err)) end
+                    local ok2, err2 = pcall(pedestals[idx].setLabelRendered, false)
+                    if not ok2 then logging.writeLog("WARN", "    setLabelRendered(false) failed: " .. tostring(err2)) end
+                end
+                os.sleep(0)  -- Yield to allow interleaving
+            end)
+        end
+    end
+
+    -- Add tasks for unused pedestals (clear them)
     for i = 1, #PEDESTALS do
         local used = false
         for _, idx in ipairs(indices) do
             if i == idx then used = true break end
         end
         if not used and pedestals[i] then
-            pcall(pedestals[i].setItem, "minecraft:air")
-            local ok1, err1 = pcall(pedestals[i].setItemRendered, false)
-            local ok2, err2 = pcall(pedestals[i].setLabelRendered, false)
-            if not ok1 then logging.writeLog("WARN", "  setItemRendered(false) failed: " .. tostring(err1)) end
-            if not ok2 then logging.writeLog("WARN", "  setLabelRendered(false) failed: " .. tostring(err2)) end
+            table.insert(tasks, function()
+                pcall(pedestals[i].setItem, "minecraft:air")
+                local ok1, err1 = pcall(pedestals[i].setItemRendered, false)
+                local ok2, err2 = pcall(pedestals[i].setLabelRendered, false)
+                if not ok1 then logging.writeLog("WARN", "  setItemRendered(false) failed: " .. tostring(err1)) end
+                if not ok2 then logging.writeLog("WARN", "  setLabelRendered(false) failed: " .. tostring(err2)) end
+                os.sleep(0)  -- Yield to allow interleaving
+            end)
         end
     end
+
+    -- Run all tasks in parallel with event re-dispatch
+    runPedestalTasksParallel(tasks)
 end
 
--- Helper: clear pedestals (remove items and labels) — atomic, no yielding
+-- Helper: clear pedestals (remove items and labels) — parallel
 local function clearPedestals()
     if not pedestals then
         logging.writeLog("WARN", "pedestals not initialized, skipping clear")
@@ -125,19 +173,24 @@ local function clearPedestals()
         currentPedestalIndices = {},
         lastSelectedPedestal = nil
     })
-    -- Clear all pedestals sequentially (no yielding between pedestals)
+    -- Clear all pedestals in parallel
+    local tasks = {}
     for i = 1, #PEDESTALS do
         if pedestals[i] then
-            local ok, err = pcall(pedestals[i].setItem, "minecraft:air")
-            if not ok then
-                logging.writeLog("WARN", "Pedestal " .. i .. " setItem failed: " .. tostring(err))
-            end
-            local ok1, err1 = pcall(pedestals[i].setItemRendered, false)
-            local ok2, err2 = pcall(pedestals[i].setLabelRendered, false)
-            if not ok1 then logging.writeLog("WARN", "Pedestal " .. i .. " setItemRendered failed: " .. tostring(err1)) end
-            if not ok2 then logging.writeLog("WARN", "Pedestal " .. i .. " setLabelRendered failed: " .. tostring(err2)) end
+            table.insert(tasks, function()
+                local ok, err = pcall(pedestals[i].setItem, "minecraft:air")
+                if not ok then
+                    logging.writeLog("WARN", "Pedestal " .. i .. " setItem failed: " .. tostring(err))
+                end
+                local ok1, err1 = pcall(pedestals[i].setItemRendered, false)
+                local ok2, err2 = pcall(pedestals[i].setLabelRendered, false)
+                if not ok1 then logging.writeLog("WARN", "Pedestal " .. i .. " setItemRendered failed: " .. tostring(err1)) end
+                if not ok2 then logging.writeLog("WARN", "Pedestal " .. i .. " setLabelRendered failed: " .. tostring(err2)) end
+                os.sleep(0)  -- Yield to allow interleaving
+            end)
         end
     end
+    runPedestalTasksParallel(tasks)
 end
 
 -- Helper: update pedestals with items and labels

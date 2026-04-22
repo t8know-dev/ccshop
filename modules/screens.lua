@@ -292,14 +292,19 @@ local function renderScreen4()
 end
 
 -- Rendering guard: prevents re-entrant rendering.
--- Rendering is atomic (no yielding during pedestal updates), so re-entrant
--- calls should not occur in practice. This guard is a safety net.
+-- When renderCurrentScreen is called while already rendering (e.g. cancel
+-- button click during parallel pedestal updates), it spins with os.sleep(0)
+-- until the current rendering completes, then proceeds with the new state.
+-- The pedestal event loop re-queues non-timer events so Basalt can process
+-- them (cancel button works). The spin is brief (~ms) because pedestal
+-- peripheral calls are fast and run in parallel.
 local _rendering = false
 
 -- Update screen based on state
 local function renderCurrentScreen()
-    if _rendering then
-        return
+    -- Wait for any in-progress rendering to complete
+    while _rendering do
+        os.sleep(0)
     end
     _rendering = true
     local ok, err = pcall(function()
