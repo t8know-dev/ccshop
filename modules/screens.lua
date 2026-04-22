@@ -30,24 +30,10 @@ local function init(loggingModule, pedestalModule, uiModule, peripheralsModule, 
     -- logging.writeLog("DEBUG", "Screens init: MSG.error_deposit = " .. tostring(MSG.error_deposit))
 end
 
--- Helper: execute UI and pedestal updates in parallel or sequential based on config
-local function executeParallelOrSequential(uiFunc, pedestalFunc)
-    -- logging.writeLog("DEBUG", "executeParallelOrSequential: config=" .. tostring(config) .. " config.get=" .. tostring(config.get))
-    local parallelRendering = config.get("PARALLEL_RENDERING")
-    -- logging.writeLog("DEBUG", "executeParallelOrSequential: PARALLEL_RENDERING=" .. tostring(parallelRendering) .. " (type: " .. type(parallelRendering) .. ")")
-    if parallelRendering == false then
-        -- logging.writeLog("DEBUG", "Parallel rendering disabled, executing sequentially")
-        uiFunc()
-        pedestalFunc()
-        -- logging.writeLog("DEBUG", "Sequential execution completed")
-    else
-        -- Run sequentially to avoid nested parallel.waitForAll calls
-        -- (pedestal functions internally use parallel rendering)
-        -- logging.writeLog("DEBUG", "Running UI then pedestal sequentially (internal parallel)")
-        uiFunc()
-        pedestalFunc()
-        -- logging.writeLog("DEBUG", "Sequential execution with internal parallel completed")
-    end
+-- Helper: execute UI and pedestal updates sequentially
+local function executeSequential(uiFunc, pedestalFunc)
+    uiFunc()
+    pedestalFunc()
 end
 
 -- Screen 1: Category selection
@@ -62,9 +48,9 @@ local function renderScreen1()
     for _, cat in ipairs(CATEGORIES) do
         table.insert(options, { item = cat.item, label = cat.label })
     end
-    -- Update UI and pedestals in parallel or sequential based on config
+    -- Update UI and pedestals sequentially
     -- logging.writeLog("DEBUG", "Starting UI and pedestal update for screen 1")
-    executeParallelOrSequential(
+    executeSequential(
         function()
             -- logging.writeLog("DEBUG", "UI update task")
             ui.updateUI()
@@ -109,8 +95,8 @@ local function renderScreen2()
         -- We'll call renderCurrentScreen via the main loop. For now, just update state.
         return
     end
-    -- Update UI and pedestals in parallel or sequential based on config
-    executeParallelOrSequential(
+    -- Update UI and pedestals sequentially
+    executeSequential(
         function() ui.updateUI() end,
         function() pedestal.setPedestalOptions(options) end
     )
@@ -146,8 +132,8 @@ local function renderScreen3Selecting()
     for _, qtyNum in ipairs(quantities) do
         table.insert(options, { item = selectedMaterial.item, label = tostring(qtyNum), count = qtyNum })
     end
-    -- Update UI and pedestals in parallel or sequential based on config
-    executeParallelOrSequential(
+    -- Update UI and pedestals sequentially
+    executeSequential(
         function() ui.updateUI() end,
         function() pedestal.setPedestalOptions(options) end
     )
@@ -217,8 +203,8 @@ local function renderScreen3Confirming()
         })
     end
 
-    -- Update UI and pedestals in parallel or sequential based on config
-    executeParallelOrSequential(
+    -- Update UI and pedestals sequentially
+    executeSequential(
         function() ui.updateUI() end,
         function() pedestal.setPedestalOptions(options) end
     )
@@ -246,12 +232,15 @@ local function renderScreen3Confirming()
         end
     end
 
-    -- Unlock depositor and establish baseline for payment detection
-    peripherals.unlockDepositor()
-    logging.writeLog("INFO", "Depositor unlocked (bottom side set to false), waiting for stabilization...")
-    os.sleep(0.5)  -- Give depositor time to stabilize
-    -- Get baseline for all sides
+    -- Establish baseline for payment detection BEFORE unlocking
+    -- This eliminates the blind window where coins could be inserted undetected
     local baselineTable = peripherals.getAllRelayInputs()
+    logging.writeLog("INFO", "Payment baseline captured before unlock")
+
+    -- Unlock depositor
+    peripherals.unlockDepositor()
+    logging.writeLog("INFO", "Depositor unlocked (bottom side set to false)")
+    os.sleep(0.5)  -- Give depositor time to stabilize
     -- logging.writeLog("DEBUG", "Payment baseline table: " .. textutils.serialize(baselineTable))
     -- logging.writeLog("DEBUG", "renderScreen3Confirming: PAYMENT_TIMEOUT="..tostring(PAYMENT_TIMEOUT).." os.clock()="..os.clock())
     -- Ensure paymentDeadline is set (fallback in case events.lua didn't set it)
@@ -270,8 +259,8 @@ end
 
 -- Screen 4: Thank you
 local function renderScreen4()
-    -- Clear pedestals and update UI in parallel or sequential based on config
-    executeParallelOrSequential(
+    -- Clear pedestals and update UI sequentially
+    executeSequential(
         function() ui.updateUI() end,
         function() pedestal.clearPedestals() end
     )
@@ -302,22 +291,34 @@ local function renderScreen4()
     state.resetToMainScreen()
 end
 
+-- Rendering guard to prevent re-entrant rendering
+local _rendering = false
+
 -- Update screen based on state
 local function renderCurrentScreen()
-    logging.writeLog("INFO", "renderCurrentScreen called - screen=" .. tostring(state.getState("screen")) .. " subState=" .. tostring(state.getState("subState")))
-    state.updateState({ lastActivity = os.clock() })
-    local screen = state.getState("screen")
-    local subState = state.getState("subState")
-    -- local paymentDeadline = state.getState("paymentDeadline")
-    -- logging.writeLog("DEBUG", "screen=" .. tostring(screen) .. " subState=" .. tostring(subState) .. " paymentDeadline=" .. tostring(paymentDeadline))
-    if screen == 1 then renderScreen1()
-    elseif screen == 2 then renderScreen2()
-    elseif screen == 3 then
-        if subState == "selecting" then renderScreen3Selecting()
-        elseif subState == "confirming" then renderScreen3Confirming()
-        else renderScreen3Selecting() -- default to selecting
+    if _rendering then
+        logging.writeLog("WARN", "renderCurrentScreen called while already rendering, skipping")
+        return
+    end
+    _rendering = true
+    local ok, err = pcall(function()
+        logging.writeLog("INFO", "renderCurrentScreen called - screen=" .. tostring(state.getState("screen")) .. " subState=" .. tostring(state.getState("subState")))
+        state.updateState({ lastActivity = os.clock() })
+        local screen = state.getState("screen")
+        local subState = state.getState("subState")
+        if screen == 1 then renderScreen1()
+        elseif screen == 2 then renderScreen2()
+        elseif screen == 3 then
+            if subState == "selecting" then renderScreen3Selecting()
+            elseif subState == "confirming" then renderScreen3Confirming()
+            else renderScreen3Selecting()
+            end
+        elseif screen == 4 then renderScreen4()
         end
-    elseif screen == 4 then renderScreen4() -- formerly screen 5
+    end)
+    _rendering = false
+    if not ok then
+        logging.writeLog("ERROR", "renderCurrentScreen failed: " .. tostring(err))
     end
 end
 
