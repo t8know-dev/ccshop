@@ -13,6 +13,7 @@ local spursToCoins = _G.spursToCoins
 local _cancelButtonLastClick = 0
 local _cancelButtonProcessing = false
 local _cancelButtonDebounceMs = 500  -- milliseconds
+local _cancelButtonJustClicked = false  -- true for 200ms after click to keep visible for feedback
 
 -- Initialize module with dependencies
 local function init(loggingModule, peripheralsModule, configModule, stateModule, basaltModule)
@@ -154,13 +155,29 @@ local function createUI()
             end
             _cancelButtonLastClick = now
             _cancelButtonProcessing = true
+            _cancelButtonJustClicked = true
             logging.writeLog("DEBUG", "Cancel button click accepted, processing started (last click: " ..
                 tostring(_cancelButtonLastClick) .. ", debounce ms: " .. _cancelButtonDebounceMs .. ")")
 
             -- Immediate visual feedback: change button color to gray
+            logging.writeLog("DEBUG", "Attempting to set cancel button color to gray for visual feedback")
             if cancelButton and cancelButton.setBackground then
-                cancelButton:setBackground(colors.gray)
-                logging.writeLog("DEBUG", "Cancel button color changed to gray (visual feedback)")
+                -- Also ensure foreground stays white for contrast
+                if cancelButton.setForeground then
+                    pcall(cancelButton.setForeground, cancelButton, colors.white)
+                end
+                local colorOk, colorErr = pcall(cancelButton.setBackground, cancelButton, colors.gray)
+                if colorOk then
+                    logging.writeLog("DEBUG", "Cancel button color changed to gray (visual feedback)")
+                    -- Try to force redraw if method exists
+                    if cancelButton.draw then
+                        pcall(cancelButton.draw, cancelButton)
+                    end
+                else
+                    logging.writeLog("ERROR", "Failed to set cancel button color to gray: " .. tostring(colorErr))
+                end
+            else
+                logging.writeLog("WARN", "Cancel button or setBackground missing")
             end
 
             -- Audio feedback
@@ -176,9 +193,67 @@ local function createUI()
             -- Reset to main screen
             state.resetToMainScreen()
             -- UI will be updated by state subscriber triggering renderCurrentScreen
+            -- Do NOT call updateUI() here to avoid double update and allow visual feedback to persist
 
-            -- Reset processing flag immediately (debounce time will prevent immediate re-clicks)
-            _cancelButtonProcessing = false
+            -- Restore button color after 200ms using coroutine
+            local restoreCo = coroutine.create(function()
+                local success, coroutineErr = pcall(function()
+                    os.sleep(0.2)  -- 200ms delay
+                    -- After 200ms, decide what to do based on current screen
+                    local currentScreen = state.getState("screen")
+                    if cancelButton then
+                        -- Check visibility
+                        local isVisible = true
+                        local visibilityCheckOk, visibilityResult = pcall(function()
+                            if cancelButton.getVisible then
+                                return cancelButton:getVisible()
+                            elseif cancelButton.isVisible then
+                                return cancelButton:isVisible()
+                            end
+                            return true  -- Default to visible if no method
+                        end)
+                        if visibilityCheckOk and visibilityResult == false then
+                            isVisible = false
+                        end
+
+                        if currentScreen == 1 and isVisible then
+                            -- On screen 1, button should be hidden (feedback period over)
+                            logging.writeLog("DEBUG", "Cancel button feedback period ended, hiding button")
+                            if cancelButton.setVisible then
+                                cancelButton:setVisible(false)
+                            end
+                            -- Optionally reset color to red for next time
+                            if cancelButton.setBackground then
+                                cancelButton:setBackground(colors.red)
+                            end
+                        elseif isVisible then
+                            -- On other screens, restore red color
+                            logging.writeLog("DEBUG", "Cancel button color restored to red")
+                            if cancelButton.setBackground then
+                                cancelButton:setBackground(colors.red)
+                            end
+                        else
+                            logging.writeLog("DEBUG", "Cancel button not visible, skipping color restoration")
+                        end
+                    end
+                end)
+                if not success then
+                    logging.writeLog("ERROR", "Color restoration coroutine error: " .. tostring(coroutineErr))
+                end
+                _cancelButtonJustClicked = false
+                _cancelButtonProcessing = false
+                -- If we're still on screen 1, trigger UI update to hide button now that flag is false
+                if state.getState("screen") == 1 then
+                    logging.writeLog("DEBUG", "Cancel button feedback period ended, updating UI to hide button")
+                    updateUI()
+                end
+            end)
+            local ok, err = pcall(coroutine.resume, restoreCo)
+            if not ok then
+                logging.writeLog("ERROR", "Failed to start color restoration coroutine: " .. tostring(err))
+                _cancelButtonProcessing = false
+            end
+
             logging.writeLog("DEBUG", "Cancel button onClick handler finished")
         end)
     -- logging.writeLog("DEBUG", "Cancel button created: " .. tostring(cancelButton) .. " at line " .. (height - 3))
@@ -235,12 +310,33 @@ local function updateUI()
                 contentLabels[contentFirstLine]:setVisible(true)
             end
         end
-        -- Hide cancel button
-        logging.writeLog("DEBUG", "Screen 1: hiding cancel button")
-        if cancelButton and cancelButton.setVisible then
-            cancelButton:setVisible(false)
+        -- Hide cancel button unless it was just clicked (keep visible for feedback)
+        if _cancelButtonJustClicked then
+            logging.writeLog("DEBUG", "Screen 1: cancel button just clicked, keeping visible with gray color")
+            if cancelButton and cancelButton.setVisible then
+                cancelButton:setVisible(true)
+                if cancelButton.setBackground then
+                    logging.writeLog("DEBUG", "Screen 1: setting cancel button background to gray")
+                    cancelButton:setBackground(colors.gray)  -- Keep gray for feedback
+                end
+                if cancelButton.setForeground then
+                    cancelButton:setForeground(colors.white)
+                end
+            end
         else
-            logging.writeLog("WARN", "Screen 1: cancelButton invalid")
+            logging.writeLog("DEBUG", "Screen 1: hiding cancel button")
+            if cancelButton and cancelButton.setVisible then
+                -- Reset color to red before hiding for next time
+                if cancelButton.setBackground then
+                    logging.writeLog("DEBUG", "Screen 1: setting cancel button background to red before hide")
+                    cancelButton:setBackground(colors.red)
+                end
+                cancelButton:setVisible(false)
+                -- Ensure processing flag is reset when button hidden (safety)
+                _cancelButtonProcessing = false
+            else
+                logging.writeLog("WARN", "Screen 1: cancelButton invalid")
+            end
         end
 
     elseif screen == 2 then
@@ -253,10 +349,15 @@ local function updateUI()
         logging.writeLog("DEBUG", "Screen 2: showing cancel button")
         if cancelButton and cancelButton.setVisible then
             cancelButton:setVisible(true)
+            if cancelButton.setBackground then
+                cancelButton:setBackground(colors.red)  -- Ensure red color when shown
+            end
             if cancelButton.setActive then
                 cancelButton:setActive(true)
                 logging.writeLog("DEBUG", "Cancel button activated")
             end
+            -- Reset processing flag when button shown (safety)
+            _cancelButtonProcessing = false
         else
             logging.writeLog("WARN", "Screen 2: cancelButton invalid")
         end
@@ -279,10 +380,15 @@ local function updateUI()
             logging.writeLog("DEBUG", "Screen 3 selecting: showing cancel button")
             if cancelButton and cancelButton.setVisible then
                 cancelButton:setVisible(true)
+                if cancelButton.setBackground then
+                    cancelButton:setBackground(colors.red)  -- Ensure red color when shown
+                end
                 if cancelButton.setActive then
                     cancelButton:setActive(true)
                     logging.writeLog("DEBUG", "Cancel button activated")
                 end
+                -- Reset processing flag when button shown (safety)
+                _cancelButtonProcessing = false
             else
                 logging.writeLog("WARN", "Screen 3 selecting: cancelButton invalid")
             end
@@ -340,10 +446,15 @@ local function updateUI()
             logging.writeLog("DEBUG", "Screen 3 confirming: showing cancel button")
             if cancelButton and cancelButton.setVisible then
                 cancelButton:setVisible(true)
+                if cancelButton.setBackground then
+                    cancelButton:setBackground(colors.red)  -- Ensure red color when shown
+                end
                 if cancelButton.setActive then
                     cancelButton:setActive(true)
                     logging.writeLog("DEBUG", "Cancel button activated")
                 end
+                -- Reset processing flag when button shown (safety)
+                _cancelButtonProcessing = false
             else
                 logging.writeLog("WARN", "Screen 3 confirming: cancelButton invalid")
             end
@@ -358,7 +469,13 @@ local function updateUI()
         -- Hide cancel button
         logging.writeLog("DEBUG", "Screen 4: hiding cancel button")
         if cancelButton and cancelButton.setVisible then
+            -- Reset color to red before hiding for next time
+            if cancelButton.setBackground then
+                cancelButton:setBackground(colors.red)
+            end
             cancelButton:setVisible(false)
+            -- Ensure processing flag is reset when button hidden (safety)
+            _cancelButtonProcessing = false
         else
             logging.writeLog("WARN", "Screen 4: cancelButton invalid")
         end
