@@ -58,12 +58,12 @@ local function centerPedestalIndices(numOptions)
     return indices
 end
 
--- Update pedestals with centered options
--- Sequential loop with os.sleep(0) between each pedestal to yield
--- to the top-level scheduler for better responsiveness.
--- NOTE: parallel.waitForAll cannot be used here because it creates an inner
--- event loop that consumes events meant for other top-level coroutines
--- (e.g. cancel button clicks handled by Basalt).
+-- Update pedestals with centered options (sequential, no yielding)
+-- Peripheral calls (setItem, setItemRendered, setLabelRendered) are fast
+-- and non-blocking. No yielding between pedestals means rendering is
+-- atomic — it completes in one time slice. This eliminates the window
+-- where events could arrive during rendering (e.g. cancel button clicks),
+-- avoiding the need for re-entrant rendering guards or deferred re-renders.
 local function updatePedestals(options)
     local indices = centerPedestalIndices(#options)
     -- Update used pedestals
@@ -96,7 +96,6 @@ local function updatePedestals(options)
                 if not ok2 then logging.writeLog("WARN", "    setLabelRendered(false) failed: " .. tostring(err2)) end
             end
         end
-        os.sleep(0)  -- Yield to allow other coroutines to run
     end
     -- Clear unused pedestals
     for i = 1, #PEDESTALS do
@@ -111,11 +110,10 @@ local function updatePedestals(options)
             if not ok1 then logging.writeLog("WARN", "  setItemRendered(false) failed: " .. tostring(err1)) end
             if not ok2 then logging.writeLog("WARN", "  setLabelRendered(false) failed: " .. tostring(err2)) end
         end
-        os.sleep(0)  -- Yield to allow other coroutines to run
     end
 end
 
--- Helper: clear pedestals (remove items and labels)
+-- Helper: clear pedestals (remove items and labels) — atomic, no yielding
 local function clearPedestals()
     if not pedestals then
         logging.writeLog("WARN", "pedestals not initialized, skipping clear")
@@ -127,7 +125,7 @@ local function clearPedestals()
         currentPedestalIndices = {},
         lastSelectedPedestal = nil
     })
-    -- Clear all pedestals sequentially with yielding
+    -- Clear all pedestals sequentially (no yielding between pedestals)
     for i = 1, #PEDESTALS do
         if pedestals[i] then
             local ok, err = pcall(pedestals[i].setItem, "minecraft:air")
@@ -139,7 +137,6 @@ local function clearPedestals()
             if not ok1 then logging.writeLog("WARN", "Pedestal " .. i .. " setItemRendered failed: " .. tostring(err1)) end
             if not ok2 then logging.writeLog("WARN", "Pedestal " .. i .. " setLabelRendered failed: " .. tostring(err2)) end
         end
-        os.sleep(0)  -- Yield to allow other coroutines to run
     end
 end
 
