@@ -29,7 +29,7 @@ local function checkIdleTimeout()
         end
         -- Log warning when approaching idle timeout (last 10 seconds) - only once
         if lastActivity and not idleWarningLogged and os.clock() - lastActivity > IDLE_TIMEOUT - 10 and os.clock() - lastActivity <= IDLE_TIMEOUT then
-            logging.writeLog("DEBUG", "checkIdleTimeout: approaching idle timeout, " .. string.format("%.1f", os.clock() - lastActivity) .. " seconds since last activity")
+            -- logging.writeLog("DEBUG", "checkIdleTimeout: approaching idle timeout, " .. string.format("%.1f", os.clock() - lastActivity) .. " seconds since last activity")
             idleWarningLogged = true
         end
         if lastActivity and os.clock() - lastActivity > IDLE_TIMEOUT then
@@ -38,7 +38,7 @@ local function checkIdleTimeout()
                 peripherals.lockDepositor()
             end
             logging.writeLog("INFO", "Idle timeout triggered, returning to screen 1")
-            logging.writeLog("DEBUG", "checkIdleTimeout: screen="..tostring(screen).." subState="..tostring(subState).." lastActivity="..tostring(lastActivity).." os.clock()="..os.clock())
+            -- logging.writeLog("DEBUG", "checkIdleTimeout: screen="..tostring(screen).." subState="..tostring(subState).." lastActivity="..tostring(lastActivity).." os.clock()="..os.clock())
             state.resetToMainScreen()
             -- Show timeout message on hint label (requires ui module)
             -- We'll need to access ui.getHintLabel(); but we don't have ui dependency.
@@ -92,7 +92,7 @@ local function checkPaymentDetection()
         end
         if paymentDeadline and (os.clock() >= paymentDeadline) then
             logging.writeLog("INFO", "Payment timeout reached, locking depositor and returning to main screen")
-            logging.writeLog("DEBUG", "checkPaymentDetection: paymentDeadline="..tostring(paymentDeadline).." os.clock()="..os.clock().." diff="..tostring(paymentDeadline - os.clock()))
+            -- logging.writeLog("DEBUG", "checkPaymentDetection: paymentDeadline="..tostring(paymentDeadline).." os.clock()="..os.clock().." diff="..tostring(paymentDeadline - os.clock()))
             peripherals.lockDepositor()  -- lock depositor
             state.resetToMainScreen()
         else

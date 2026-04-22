@@ -12,7 +12,9 @@
       "Bash(find . -name \"*.lua\" -exec luac -p {})",
       "Bash(2)",
       "Bash(echo \"Exit code: $?\")",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(grep -n logging.writeLog.*\"\"DEBUG\"\" *.lua modules/*.lua)",
+      "Bash(grep -n ^[^-]*logging.writeLog.*\"\"DEBUG\"\" *.lua modules/*.lua)"
     ]
   }
 }

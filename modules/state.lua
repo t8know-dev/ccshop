@@ -59,13 +59,13 @@ local function updateState(changes)
     end
 
     if ok and logging.writeLog and hasImportantChange then
-        logging.writeLog("DEBUG", "updateState called with important changes: " .. textutils.serialize(changes))
+        -- logging.writeLog("DEBUG", "updateState called with important changes: " .. textutils.serialize(changes))
     end
 
     for k, v in pairs(changes) do
         if state[k] ~= v then
             if ok and logging.writeLog and importantKeys[k] then
-                logging.writeLog("DEBUG", "  updating " .. k .. ": " .. tostring(state[k]) .. " -> " .. tostring(v))
+                -- logging.writeLog("DEBUG", "  updating " .. k .. ": " .. tostring(state[k]) .. " -> " .. tostring(v))
             end
             state[k] = v
             changed = true
@@ -74,7 +74,7 @@ local function updateState(changes)
 
     if changed then
         if ok and logging.writeLog then
-            logging.writeLog("DEBUG", "State changed, notifying " .. #subscribers .. " subscribers. Changes: " .. textutils.serialize(changes))
+            -- logging.writeLog("DEBUG", "State changed, notifying " .. #subscribers .. " subscribers. Changes: " .. textutils.serialize(changes))
         end
         for _, callback in ipairs(subscribers) do
             local cbOk, cbErr = pcall(callback, changes)
@@ -114,7 +114,7 @@ end
 local function resetToMainScreen()
     local ok, logging = pcall(require, "modules.logging")
     if ok and logging.writeLog then
-        logging.writeLog("DEBUG", "resetToMainScreen called")
+        -- logging.writeLog("DEBUG", "resetToMainScreen called")
     end
     updateState({
         screen = 1,

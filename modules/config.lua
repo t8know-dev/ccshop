@@ -74,7 +74,7 @@ local function get(key)
     if key == "MSG" then
         local logging = _G.logging  -- May not be available
         if logging and logging.writeLog then
-            pcall(logging.writeLog, "DEBUG", "config.get('MSG') called, value is " .. tostring(value))
+            -- pcall(logging.writeLog, "DEBUG", "config.get('MSG') called, value is " .. tostring(value))
         end
     end
     return value

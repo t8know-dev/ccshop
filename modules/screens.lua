@@ -21,41 +21,41 @@ local function init(loggingModule, pedestalModule, uiModule, peripheralsModule, 
     config = configModule
     state = stateModule
     db = dbModule
-    logging.writeLog("DEBUG", "Screens init called, getting MSG from config")
+    -- logging.writeLog("DEBUG", "Screens init called, getting MSG from config")
     MSG = configModule.get("MSG")
-    logging.writeLog("DEBUG", "Screens init: MSG = " .. tostring(MSG))
+    -- logging.writeLog("DEBUG", "Screens init: MSG = " .. tostring(MSG))
     if not MSG then
         error("Screens init: MSG configuration not loaded")
     end
-    logging.writeLog("DEBUG", "Screens init: MSG.error_deposit = " .. tostring(MSG.error_deposit))
+    -- logging.writeLog("DEBUG", "Screens init: MSG.error_deposit = " .. tostring(MSG.error_deposit))
 end
 
 -- Helper: execute UI and pedestal updates in parallel or sequential based on config
 local function executeParallelOrSequential(uiFunc, pedestalFunc)
-    logging.writeLog("DEBUG", "executeParallelOrSequential: config=" .. tostring(config) .. " config.get=" .. tostring(config.get))
+    -- logging.writeLog("DEBUG", "executeParallelOrSequential: config=" .. tostring(config) .. " config.get=" .. tostring(config.get))
     local parallelRendering = config.get("PARALLEL_RENDERING")
-    logging.writeLog("DEBUG", "executeParallelOrSequential: PARALLEL_RENDERING=" .. tostring(parallelRendering) .. " (type: " .. type(parallelRendering) .. ")")
+    -- logging.writeLog("DEBUG", "executeParallelOrSequential: PARALLEL_RENDERING=" .. tostring(parallelRendering) .. " (type: " .. type(parallelRendering) .. ")")
     if parallelRendering == false then
-        logging.writeLog("DEBUG", "Parallel rendering disabled, executing sequentially")
+        -- logging.writeLog("DEBUG", "Parallel rendering disabled, executing sequentially")
         uiFunc()
         pedestalFunc()
-        logging.writeLog("DEBUG", "Sequential execution completed")
+        -- logging.writeLog("DEBUG", "Sequential execution completed")
     else
         -- Run sequentially to avoid nested parallel.waitForAll calls
         -- (pedestal functions internally use parallel rendering)
-        logging.writeLog("DEBUG", "Running UI then pedestal sequentially (internal parallel)")
+        -- logging.writeLog("DEBUG", "Running UI then pedestal sequentially (internal parallel)")
         uiFunc()
         pedestalFunc()
-        logging.writeLog("DEBUG", "Sequential execution with internal parallel completed")
+        -- logging.writeLog("DEBUG", "Sequential execution with internal parallel completed")
     end
 end
 
 -- Screen 1: Category selection
 local function renderScreen1()
     logging.writeLog("INFO", "Rendering screen 1 (categories)")
-    logging.writeLog("DEBUG", "CATEGORIES count: " .. tostring(#CATEGORIES))
-    logging.writeLog("DEBUG", "MATERIALS count: " .. tostring(#MATERIALS))
-    logging.writeLog("DEBUG", "QUANTITIES count: " .. tostring(#QUANTITIES))
+    -- logging.writeLog("DEBUG", "CATEGORIES count: " .. tostring(#CATEGORIES))
+    -- logging.writeLog("DEBUG", "MATERIALS count: " .. tostring(#MATERIALS))
+    -- logging.writeLog("DEBUG", "QUANTITIES count: " .. tostring(#QUANTITIES))
     -- Clear pedestals first (like screen 2 and 3 selecting)
     pedestal.clearPedestals()
     local options = {}
@@ -63,17 +63,17 @@ local function renderScreen1()
         table.insert(options, { item = cat.item, label = cat.label })
     end
     -- Update UI and pedestals in parallel or sequential based on config
-    logging.writeLog("DEBUG", "Starting UI and pedestal update for screen 1")
+    -- logging.writeLog("DEBUG", "Starting UI and pedestal update for screen 1")
     executeParallelOrSequential(
         function()
-            logging.writeLog("DEBUG", "UI update task")
+            -- logging.writeLog("DEBUG", "UI update task")
             ui.updateUI()
-            logging.writeLog("DEBUG", "UI update completed")
+            -- logging.writeLog("DEBUG", "UI update completed")
         end,
         function()
-            logging.writeLog("DEBUG", "Pedestal update task")
+            -- logging.writeLog("DEBUG", "Pedestal update task")
             pedestal.setPedestalOptions(options)
-            logging.writeLog("DEBUG", "Pedestal update completed")
+            -- logging.writeLog("DEBUG", "Pedestal update completed")
         end
     )
 end
@@ -84,20 +84,20 @@ local function renderScreen2()
     logging.writeLog("INFO", "Rendering screen 2 (materials) for category: " .. tostring(selectedCategory))
     pedestal.clearPedestals()
     local options = {}
-    logging.writeLog("DEBUG", "MATERIALS total: " .. #MATERIALS)
+    -- logging.writeLog("DEBUG", "MATERIALS total: " .. #MATERIALS)
     for idx, mat in ipairs(MATERIALS) do
         if mat.category == selectedCategory then
-            logging.writeLog("DEBUG", "Material " .. idx .. ": item=" .. mat.item .. ", label=" .. mat.label .. ", category=" .. mat.category .. ", minQty=" .. mat.minQty)
+            -- logging.writeLog("DEBUG", "Material " .. idx .. ": item=" .. mat.item .. ", label=" .. mat.label .. ", category=" .. mat.category .. ", minQty=" .. mat.minQty)
             local stock = peripherals.getAE2Stock(mat.item)
-            logging.writeLog("DEBUG", "  stock=" .. stock)
+            -- logging.writeLog("DEBUG", "  stock=" .. stock)
             if stock >= mat.minQty then
-                logging.writeLog("DEBUG", "  -> qualifies")
+                -- logging.writeLog("DEBUG", "  -> qualifies")
                 table.insert(options, { item = mat.item, label = mat.label })
             else
-                logging.writeLog("DEBUG", "  -> insufficient stock")
+                -- logging.writeLog("DEBUG", "  -> insufficient stock")
             end
         else
-            logging.writeLog("DEBUG", "Material " .. idx .. ": item=" .. mat.item .. " category mismatch (" .. mat.category .. " vs " .. selectedCategory .. ")")
+            -- logging.writeLog("DEBUG", "Material " .. idx .. ": item=" .. mat.item .. " category mismatch (" .. mat.category .. " vs " .. selectedCategory .. ")")
         end
     end
     logging.writeLog("INFO", "Available materials: " .. #options)
@@ -122,7 +122,7 @@ local function renderScreen3Selecting()
     logging.writeLog("INFO", "Rendering screen 3 (selecting) for material: " .. tostring(selectedMaterial.item))
     pedestal.clearPedestals()
     local stock = peripherals.getAE2Stock(selectedMaterial.item)
-    logging.writeLog("DEBUG", "Stock: " .. stock .. " minQty: " .. selectedMaterial.minQty)
+    -- logging.writeLog("DEBUG", "Stock: " .. stock .. " minQty: " .. selectedMaterial.minQty)
     local quantities = {}
     local startIdx = findQuantityIndex(selectedMaterial.minQty)
     if not startIdx then startIdx = 1 end
@@ -196,7 +196,7 @@ local function renderScreen3Confirming()
     local ok, err = pcall(peripherals.getDepositor().setTotalPrice, finalPrice)
     if not ok then
         logging.writeLog("ERROR", "Depositor setTotalPrice failed: " .. tostring(err))
-        logging.writeLog("DEBUG", "Depositor error, resetting to main screen")
+        -- logging.writeLog("DEBUG", "Depositor error, resetting to main screen")
         local hintLabel = ui.getHintLabel()
         if hintLabel then
             hintLabel:setText(MSG.error_deposit)
@@ -233,7 +233,7 @@ local function renderScreen3Confirming()
                 label = "[ " .. label .. " ]"
                 state.updateState({ lastSelectedPedestal = idx })
             end
-            logging.writeLog("DEBUG", "Setting pedestal " .. idx .. " label: " .. label)
+            -- logging.writeLog("DEBUG", "Setting pedestal " .. idx .. " label: " .. label)
             pcall(pedestals[idx].setItem, opt.item, label)
             pcall(pedestals[idx].setItemRendered, true)
             pcall(pedestals[idx].setLabelRendered, true)
@@ -292,7 +292,7 @@ local function renderScreen4()
     logging.writeLog("INFO", "[MOCK] Dispense " .. selectedQty .. "x " .. selectedMaterial.item)
     -- Auto-return to screen 1 after CONFIRM_DELAY seconds
     os.sleep(CONFIRM_DELAY)
-    logging.writeLog("DEBUG", "Screen 4 auto-return, resetting to main screen")
+    -- logging.writeLog("DEBUG", "Screen 4 auto-return, resetting to main screen")
     state.resetToMainScreen()
 end
 

@@ -16,18 +16,18 @@ local function init(loggingModule, peripheralsModule, configModule, stateModule,
     config = configModule
     state = stateModule
     basalt = basaltModule
-    logging.writeLog("DEBUG", "UI init called, getting MSG from config")
+    -- logging.writeLog("DEBUG", "UI init called, getting MSG from config")
     MSG = configModule.get("MSG")
-    logging.writeLog("DEBUG", "UI init: MSG = " .. tostring(MSG))
+    -- logging.writeLog("DEBUG", "UI init: MSG = " .. tostring(MSG))
     if not MSG then
         error("UI init: MSG configuration not loaded")
     end
-    logging.writeLog("DEBUG", "UI init: MSG.header = " .. tostring(MSG.header))
+    -- logging.writeLog("DEBUG", "UI init: MSG.header = " .. tostring(MSG.header))
 end
 
 -- Create UI frame with fixed coordinate positioning
 local function createUI()
-    logging.writeLog("DEBUG", "UI createUI called (fixed coordinate)")
+    -- logging.writeLog("DEBUG", "UI createUI called (fixed coordinate)")
     -- Ensure MSG is loaded
     if not MSG then
         logging.writeLog("WARN", "MSG is nil in createUI, attempting to load from config")
@@ -37,40 +37,40 @@ local function createUI()
             return
         end
     end
-    logging.writeLog("DEBUG", "UI createUI: MSG.header = " .. tostring(MSG.header))
+    -- logging.writeLog("DEBUG", "UI createUI: MSG.header = " .. tostring(MSG.header))
     local monitor = peripherals.getMonitor()
     if not monitor then
         logging.writeLog("ERROR", "Monitor not available for UI creation")
         return
     end
-    logging.writeLog("DEBUG", "Monitor found, using Basalt")
+    -- logging.writeLog("DEBUG", "Monitor found, using Basalt")
     if not basalt then
         logging.writeLog("ERROR", "Basalt module not initialized")
         return
     end
     -- Redirect term to monitor (cashier.lua pattern)
-    logging.writeLog("DEBUG", "Redirecting term to monitor")
+    -- logging.writeLog("DEBUG", "Redirecting term to monitor")
     term.redirect(monitor)
     mainFrame = basalt.getMainFrame()
-    logging.writeLog("DEBUG", "basalt.getMainFrame() returned: " .. tostring(mainFrame))
+    -- logging.writeLog("DEBUG", "basalt.getMainFrame() returned: " .. tostring(mainFrame))
     if not mainFrame then
         logging.writeLog("WARN", "basalt.getMainFrame() returned nil, falling back to basalt.createFrame()")
         mainFrame = basalt.createFrame()
         if mainFrame then
             mainFrame:setTerm(monitor)
-            logging.writeLog("DEBUG", "Created frame with setTerm")
+            -- logging.writeLog("DEBUG", "Created frame with setTerm")
         else
             logging.writeLog("ERROR", "basalt.createFrame() also returned nil")
             return
         end
     end
     mainFrame:setBackground(colors.black)
-    logging.writeLog("DEBUG", "Main frame background set")
+    -- logging.writeLog("DEBUG", "Main frame background set")
     -- Get monitor dimensions via term.getSize() after redirect
     local width, height = term.getSize()
     monitorWidth = width
     monitorHeight = height
-    logging.writeLog("DEBUG", "Monitor dimensions: " .. width .. "x" .. height)
+    -- logging.writeLog("DEBUG", "Monitor dimensions: " .. width .. "x" .. height)
 
     -- Header (top bar) - Lines 1-2 with larger font, centered
     headerLabel = mainFrame:addLabel()
@@ -80,19 +80,19 @@ local function createUI()
     -- Try to center text
     local alignOk, alignErr = pcall(function() headerLabel:setTextAlign("center") end)
     if alignOk then
-        logging.writeLog("DEBUG", "Text centered")
+        -- logging.writeLog("DEBUG", "Text centered")
     else
         logging.writeLog("WARN", "setTextAlign failed: " .. tostring(alignErr))
     end
     -- Try to set font size safely
     local fontSizeOk, fontSizeErr = pcall(function() headerLabel:setFontSize(2) end)
     if fontSizeOk then
-        logging.writeLog("DEBUG", "Header label created with font size 2")
+        -- logging.writeLog("DEBUG", "Header label created with font size 2")
     else
         logging.writeLog("WARN", "setFontSize failed: " .. tostring(fontSizeErr))
         -- Fallback: increase label height for larger appearance
         headerLabel:setSize(width, 3)
-        logging.writeLog("DEBUG", "Header label fallback to height 3")
+        -- logging.writeLog("DEBUG", "Header label fallback to height 3")
     end
 
     -- Determine starting line for content based on available space
@@ -103,7 +103,7 @@ local function createUI()
         local _ = mainFrame:addLabel()
             :setPosition(1,3):setSize(width,1)
             :setBackground(colors.black):setText("")
-        logging.writeLog("DEBUG", "Spacer label created at line 3")
+        -- logging.writeLog("DEBUG", "Spacer label created at line 3")
         contentFirstLine = 4  -- header lines 1-2, spacer line 3, content starts at 4
     else
         logging.writeLog("WARN", "Monitor height " .. height .. " is small, skipping spacer line")
@@ -116,13 +116,13 @@ local function createUI()
         contentLastLine = contentFirstLine
         logging.writeLog("WARN", "Monitor height very small, UI may be cramped")
     end
-    logging.writeLog("DEBUG", "Creating content labels lines " .. contentFirstLine .. " to " .. contentLastLine)
+    -- logging.writeLog("DEBUG", "Creating content labels lines " .. contentFirstLine .. " to " .. contentLastLine)
     for i = contentFirstLine, contentLastLine do
         contentLabels[i] = mainFrame:addLabel()
             :setPosition(1, i):setSize(width, 1)
             :setBackground(colors.black):setForeground(colors.lightGray)
             :setVisible(false)
-        logging.writeLog("DEBUG", "Content label line " .. i .. " created")
+        -- logging.writeLog("DEBUG", "Content label line " .. i .. " created")
     end
 
     -- Cancel button (bottom-left corner) styled like cashier example
@@ -135,20 +135,20 @@ local function createUI()
         :setBackground(colors.red)
         :setForeground(colors.white)
         :onClick(function()
-            logging.writeLog("DEBUG", "Cancel button onClick handler started")
+            -- logging.writeLog("DEBUG", "Cancel button onClick handler started")
             peripherals.playNoteblockSoundLow()
             -- Lock depositor if on payment screen (screen 3 confirming)
             if state.getState("screen") == 3 and state.getState("subState") == "confirming" then
-                logging.writeLog("DEBUG", "Cancel button: locking depositor")
+                -- logging.writeLog("DEBUG", "Cancel button: locking depositor")
                 peripherals.lockDepositor()
             end
-            logging.writeLog("DEBUG", "Cancel button clicked, resetting to main screen")
+            -- logging.writeLog("DEBUG", "Cancel button clicked, resetting to main screen")
             -- Reset to main screen
             state.resetToMainScreen()
             -- UI will be updated by state subscriber triggering renderCurrentScreen
-            logging.writeLog("DEBUG", "Cancel button onClick handler finished")
+            -- logging.writeLog("DEBUG", "Cancel button onClick handler finished")
         end)
-    logging.writeLog("DEBUG", "Cancel button created: " .. tostring(cancelButton) .. " at line " .. (height - 3))
+    -- logging.writeLog("DEBUG", "Cancel button created: " .. tostring(cancelButton) .. " at line " .. (height - 3))
     if cancelButton and cancelButton.setVisible then
         cancelButton:setVisible(false)
     else
@@ -160,7 +160,7 @@ end
 local function updateUI()
     local screen = state.getState("screen")
     local subState = state.getState("subState")
-    logging.writeLog("DEBUG", "updateUI called: screen=" .. tostring(screen) .. " subState=" .. tostring(subState))
+    -- logging.writeLog("DEBUG", "updateUI called: screen=" .. tostring(screen) .. " subState=" .. tostring(subState))
 
     -- Hide all content labels first
     for _, label in pairs(contentLabels) do
@@ -203,7 +203,7 @@ local function updateUI()
             end
         end
         -- Hide cancel button
-        logging.writeLog("DEBUG", "Screen 1: hiding cancel button")
+        -- logging.writeLog("DEBUG", "Screen 1: hiding cancel button")
         if cancelButton and cancelButton.setVisible then
             cancelButton:setVisible(false)
         else
@@ -217,7 +217,7 @@ local function updateUI()
             contentLabels[contentFirstLine]:setVisible(true)
         end
         -- Show cancel button
-        logging.writeLog("DEBUG", "Screen 2: showing cancel button")
+        -- logging.writeLog("DEBUG", "Screen 2: showing cancel button")
         if cancelButton and cancelButton.setVisible then
             cancelButton:setVisible(true)
         else
@@ -239,7 +239,7 @@ local function updateUI()
                 contentLabels[contentFirstLine]:setVisible(true)
             end
             -- Show cancel button
-            logging.writeLog("DEBUG", "Screen 3 selecting: showing cancel button")
+            -- logging.writeLog("DEBUG", "Screen 3 selecting: showing cancel button")
             if cancelButton and cancelButton.setVisible then
                 cancelButton:setVisible(true)
             else
@@ -296,7 +296,7 @@ local function updateUI()
                 end
             end
             -- Show cancel button
-            logging.writeLog("DEBUG", "Screen 3 confirming: showing cancel button")
+            -- logging.writeLog("DEBUG", "Screen 3 confirming: showing cancel button")
             if cancelButton and cancelButton.setVisible then
                 cancelButton:setVisible(true)
             else
@@ -311,7 +311,7 @@ local function updateUI()
             contentLabels[contentFirstLine]:setVisible(true)
         end
         -- Hide cancel button
-        logging.writeLog("DEBUG", "Screen 4: hiding cancel button")
+        -- logging.writeLog("DEBUG", "Screen 4: hiding cancel button")
         if cancelButton and cancelButton.setVisible then
             cancelButton:setVisible(false)
         else

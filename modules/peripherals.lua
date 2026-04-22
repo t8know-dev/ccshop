@@ -26,24 +26,24 @@ end
 local function initPeripherals()
     logging.writeLog("INFO", "Initializing peripherals")
     relayLock = peripheral.wrap(RELAY_LOCK)
-    logging.writeLog("DEBUG", "RELAY_LOCK wrapped: " .. tostring(relayLock))
+    -- logging.writeLog("DEBUG", "RELAY_LOCK wrapped: " .. tostring(relayLock))
     ae2Adapter = peripheral.wrap(AE2_ADAPTER)
     if not ae2Adapter then
-        logging.writeLog("DEBUG", "AE2_ADAPTER wrap failed, trying peripheral.find(\"ae2cc_adapter\")")
+        -- logging.writeLog("DEBUG", "AE2_ADAPTER wrap failed, trying peripheral.find(\"ae2cc_adapter\")")
         ae2Adapter = peripheral.find("ae2cc_adapter")
     end
-    logging.writeLog("DEBUG", "AE2_ADAPTER wrapped: " .. tostring(ae2Adapter) .. " (name: " .. AE2_ADAPTER .. ")")
+    -- logging.writeLog("DEBUG", "AE2_ADAPTER wrapped: " .. tostring(ae2Adapter) .. " (name: " .. AE2_ADAPTER .. ")")
     depositor = peripheral.wrap(DEPOSITOR)
-    logging.writeLog("DEBUG", "DEPOSITOR wrapped: " .. tostring(depositor))
+    -- logging.writeLog("DEBUG", "DEPOSITOR wrapped: " .. tostring(depositor))
     speaker = peripheral.wrap(SPEAKER_NAME)
-    logging.writeLog("DEBUG", "SPEAKER wrapped: " .. tostring(speaker))
+    -- logging.writeLog("DEBUG", "SPEAKER wrapped: " .. tostring(speaker))
     monitor = peripheral.wrap(MONITOR)
-    logging.writeLog("DEBUG", "MONITOR wrapped: " .. tostring(monitor))
+    -- logging.writeLog("DEBUG", "MONITOR wrapped: " .. tostring(monitor))
     pedestals = {}
     for i, name in ipairs(PEDESTALS) do
         pedestals[i] = peripheral.wrap(name)
         if pedestals[i] then
-            logging.writeLog("DEBUG", "Pedestal " .. i .. ": " .. name .. " wrapped successfully")
+            -- logging.writeLog("DEBUG", "Pedestal " .. i .. ": " .. name .. " wrapped successfully")
         else
             logging.writeLog("WARN", "Pedestal " .. i .. ": " .. name .. " failed to wrap")
         end
@@ -52,14 +52,14 @@ local function initPeripherals()
     pedestalIndexByName = {}
     for i, name in ipairs(PEDESTALS) do
         pedestalIndexByName[name] = i
-        logging.writeLog("DEBUG", "Pedestal mapping: " .. name .. " -> " .. i)
+        -- logging.writeLog("DEBUG", "Pedestal mapping: " .. name .. " -> " .. i)
     end
     -- Create object->index mapping
     pedestalObjectToIndex = {}
     for i, ped in ipairs(pedestals) do
         if ped then
             pedestalObjectToIndex[ped] = i
-            logging.writeLog("DEBUG", "Pedestal object mapping: " .. tostring(ped) .. " -> " .. i)
+            -- logging.writeLog("DEBUG", "Pedestal object mapping: " .. tostring(ped) .. " -> " .. i)
         end
     end
     -- Ensure monitor is cleared and set text scale
@@ -72,7 +72,7 @@ end
 -- AE2 stock cache
 local function refreshAE2Cache()
     if not ae2Adapter then
-        logging.writeLog("DEBUG", "AE2 adapter not available, cannot refresh cache")
+        -- logging.writeLog("DEBUG", "AE2 adapter not available, cannot refresh cache")
         return
     end
     local ok, objects = pcall(ae2Adapter.getAvailableObjects)
@@ -82,7 +82,7 @@ local function refreshAE2Cache()
             ae2Cache.data[obj.id] = obj.amount or 0
         end
         ae2Cache.timestamp = os.clock()
-        logging.writeLog("DEBUG", "AE2 cache refreshed: " .. #objects .. " items")
+        -- logging.writeLog("DEBUG", "AE2 cache refreshed: " .. #objects .. " items")
     else
         logging.writeLog("ERROR", "AE2 cache refresh failed: " .. tostring(objects))
     end
@@ -92,7 +92,7 @@ end
 local function getAE2Stock(itemName)
     -- Refresh cache if stale
     if os.clock() - ae2Cache.timestamp > ae2Cache.ttl then
-        logging.writeLog("DEBUG", "AE2 cache stale, refreshing")
+        -- logging.writeLog("DEBUG", "AE2 cache stale, refreshing")
         refreshAE2Cache()
     end
 
@@ -104,12 +104,12 @@ local function getAE2Stock(itemName)
     -- Check cache first
     if ae2Cache.data[itemName] ~= nil then
         local amount = ae2Cache.data[itemName]
-        logging.writeLog("DEBUG", "getAE2Stock cache hit: " .. itemName .. " -> " .. amount)
+        -- logging.writeLog("DEBUG", "getAE2Stock cache hit: " .. itemName .. " -> " .. amount)
         return amount
     end
 
     -- Fallback to direct query (should not happen if cache is fresh)
-    logging.writeLog("DEBUG", "getAE2Stock cache miss: " .. itemName .. ", performing direct query")
+    -- logging.writeLog("DEBUG", "getAE2Stock cache miss: " .. itemName .. ", performing direct query")
     local ok, objects = pcall(ae2Adapter.getAvailableObjects)
     if not ok then
         logging.writeLog("ERROR", "AE2 adapter error: " .. tostring(objects))
@@ -121,19 +121,19 @@ local function getAE2Stock(itemName)
             local amount = obj.amount or 0
             -- Update cache
             ae2Cache.data[itemName] = amount
-            logging.writeLog("DEBUG", "getAE2Stock direct match: " .. itemName .. " -> " .. amount)
+            -- logging.writeLog("DEBUG", "getAE2Stock direct match: " .. itemName .. " -> " .. amount)
             return amount
         end
     end
 
-    logging.writeLog("DEBUG", "getAE2Stock no match for " .. itemName)
+    -- logging.writeLog("DEBUG", "getAE2Stock no match for " .. itemName)
     ae2Cache.data[itemName] = 0  -- Cache miss as zero to avoid repeated queries
     return 0
 end
 
 -- Helper: play noteblock high sound (harp F) - selection confirm
 local function playNoteblockSoundHigh()
-    logging.writeLog("DEBUG", "Playing high sound: harp F")
+    -- logging.writeLog("DEBUG", "Playing high sound: harp F")
     if speaker and speaker.playNote then
         pcall(speaker.playNote, "harp", 1.0, 11)  -- harp instrument, volume 1.0, pitch 11 (F note)
     else
@@ -143,7 +143,7 @@ end
 
 -- Helper: play noteblock low sound (bass F) - go back / cancel
 local function playNoteblockSoundLow()
-    logging.writeLog("DEBUG", "Playing low sound: bass F")
+    -- logging.writeLog("DEBUG", "Playing low sound: bass F")
     if speaker and speaker.playNote then
         pcall(speaker.playNote, "bass", 1.0, 11)  -- bass instrument, volume 1.0, pitch 11 (F note)
     else

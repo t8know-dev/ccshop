@@ -59,12 +59,12 @@ payment.init(logging, state, peripherals, screens, config)
 -- State change listener: trigger screen re‑render when screen changes
 -- ============================================================================
 state.subscribe(function(changes)
-    logging.writeLog("DEBUG", "State subscriber called with changes: " .. textutils.serialize(changes))
+    -- logging.writeLog("DEBUG", "State subscriber called with changes: " .. textutils.serialize(changes))
     if changes.screen ~= nil or changes.subState ~= nil or changes.selectedQty ~= nil then
-        logging.writeLog("DEBUG", "State changes: " .. textutils.serialize(changes) .. " triggering render")
+        -- logging.writeLog("DEBUG", "State changes: " .. textutils.serialize(changes) .. " triggering render")
         screens.renderCurrentScreen()
     else
-        logging.writeLog("DEBUG", "State changes ignored (no screen/subState/selectedQty)")
+        -- logging.writeLog("DEBUG", "State changes ignored (no screen/subState/selectedQty)")
     end
 end)
 
@@ -77,14 +77,14 @@ local ok, err = pcall(function()
     config.validateAll()
 
     -- Create Basalt UI
-    logging.writeLog("DEBUG", "Calling ui.createUI()")
+    -- logging.writeLog("DEBUG", "Calling ui.createUI()")
     ui.createUI()
-    logging.writeLog("DEBUG", "ui.createUI() completed")
+    -- logging.writeLog("DEBUG", "ui.createUI() completed")
 
     -- Render initial screen (screen 1)
-    logging.writeLog("DEBUG", "Calling screens.renderCurrentScreen()")
+    -- logging.writeLog("DEBUG", "Calling screens.renderCurrentScreen()")
     screens.renderCurrentScreen()
-    logging.writeLog("DEBUG", "screens.renderCurrentScreen() completed")
+    -- logging.writeLog("DEBUG", "screens.renderCurrentScreen() completed")
 
     -- Run main loops in parallel
     parallel.waitForAny(
