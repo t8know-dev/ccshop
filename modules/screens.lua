@@ -310,7 +310,8 @@ local function renderCurrentScreen()
         -- Only queue a pending render if the screen or subState will be different
         -- from what was last rendered (or is currently being rendered)
         if screen ~= _lastRenderedScreen or subState ~= _lastRenderedSubState then
-            logging.writeLog("WARN", "renderCurrentScreen called while already rendering, queuing pending render")
+            logging.writeLog("WARN", "renderCurrentScreen called while already rendering, queuing pending render (screen=" ..
+                tostring(screen) .. ", subState=" .. tostring(subState) .. ")")
             _pendingRender = true
         else
             logging.writeLog("DEBUG", "renderCurrentScreen called while already rendering, but screen/subState unchanged, skipping")

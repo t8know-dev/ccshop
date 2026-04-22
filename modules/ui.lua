@@ -9,6 +9,11 @@ local contentFirstLine = 3  -- default, may be increased if monitor height allow
 local contentLastLine = 9
 local spursToCoins = _G.spursToCoins
 
+-- Cancel button debouncing and state tracking
+local _cancelButtonLastClick = 0
+local _cancelButtonProcessing = false
+local _cancelButtonDebounceMs = 500  -- milliseconds
+
 -- Initialize module with dependencies
 local function init(loggingModule, peripheralsModule, configModule, stateModule, basaltModule)
     logging = loggingModule
@@ -24,6 +29,7 @@ local function init(loggingModule, peripheralsModule, configModule, stateModule,
     end
     -- logging.writeLog("DEBUG", "UI init: MSG.header = " .. tostring(MSG.header))
 end
+
 
 -- Create UI frame with fixed coordinate positioning
 local function createUI()
@@ -135,18 +141,45 @@ local function createUI()
         :setBackground(colors.red)
         :setForeground(colors.white)
         :onClick(function()
-            -- logging.writeLog("DEBUG", "Cancel button onClick handler started")
+            logging.writeLog("DEBUG", "Cancel button onClick handler started")
+            local now = os.clock()
+            -- Debounce check
+            if _cancelButtonProcessing then
+                logging.writeLog("DEBUG", "Cancel button click ignored - already processing")
+                return
+            end
+            if (now - _cancelButtonLastClick) * 1000 < _cancelButtonDebounceMs then
+                logging.writeLog("DEBUG", "Cancel button click ignored - within debounce window")
+                return
+            end
+            _cancelButtonLastClick = now
+            _cancelButtonProcessing = true
+            logging.writeLog("DEBUG", "Cancel button click accepted, processing started (last click: " ..
+                tostring(_cancelButtonLastClick) .. ", debounce ms: " .. _cancelButtonDebounceMs .. ")")
+
+            -- Immediate visual feedback: change button color to gray
+            if cancelButton and cancelButton.setBackground then
+                cancelButton:setBackground(colors.gray)
+                logging.writeLog("DEBUG", "Cancel button color changed to gray (visual feedback)")
+            end
+
+            -- Audio feedback
             peripherals.playNoteblockSoundLow()
+
             -- Lock depositor if on payment screen (screen 3 confirming)
             if state.getState("screen") == 3 and state.getState("subState") == "confirming" then
                 -- logging.writeLog("DEBUG", "Cancel button: locking depositor")
                 peripherals.lockDepositor()
             end
+
             -- logging.writeLog("DEBUG", "Cancel button clicked, resetting to main screen")
             -- Reset to main screen
             state.resetToMainScreen()
             -- UI will be updated by state subscriber triggering renderCurrentScreen
-            -- logging.writeLog("DEBUG", "Cancel button onClick handler finished")
+
+            -- Reset processing flag immediately (debounce time will prevent immediate re-clicks)
+            _cancelButtonProcessing = false
+            logging.writeLog("DEBUG", "Cancel button onClick handler finished")
         end)
     -- logging.writeLog("DEBUG", "Cancel button created: " .. tostring(cancelButton) .. " at line " .. (height - 3))
     if cancelButton and cancelButton.setVisible then
@@ -203,7 +236,7 @@ local function updateUI()
             end
         end
         -- Hide cancel button
-        -- logging.writeLog("DEBUG", "Screen 1: hiding cancel button")
+        logging.writeLog("DEBUG", "Screen 1: hiding cancel button")
         if cancelButton and cancelButton.setVisible then
             cancelButton:setVisible(false)
         else
@@ -217,9 +250,13 @@ local function updateUI()
             contentLabels[contentFirstLine]:setVisible(true)
         end
         -- Show cancel button
-        -- logging.writeLog("DEBUG", "Screen 2: showing cancel button")
+        logging.writeLog("DEBUG", "Screen 2: showing cancel button")
         if cancelButton and cancelButton.setVisible then
             cancelButton:setVisible(true)
+            if cancelButton.setActive then
+                cancelButton:setActive(true)
+                logging.writeLog("DEBUG", "Cancel button activated")
+            end
         else
             logging.writeLog("WARN", "Screen 2: cancelButton invalid")
         end
@@ -239,9 +276,13 @@ local function updateUI()
                 contentLabels[contentFirstLine]:setVisible(true)
             end
             -- Show cancel button
-            -- logging.writeLog("DEBUG", "Screen 3 selecting: showing cancel button")
+            logging.writeLog("DEBUG", "Screen 3 selecting: showing cancel button")
             if cancelButton and cancelButton.setVisible then
                 cancelButton:setVisible(true)
+                if cancelButton.setActive then
+                    cancelButton:setActive(true)
+                    logging.writeLog("DEBUG", "Cancel button activated")
+                end
             else
                 logging.writeLog("WARN", "Screen 3 selecting: cancelButton invalid")
             end
@@ -296,9 +337,13 @@ local function updateUI()
                 end
             end
             -- Show cancel button
-            -- logging.writeLog("DEBUG", "Screen 3 confirming: showing cancel button")
+            logging.writeLog("DEBUG", "Screen 3 confirming: showing cancel button")
             if cancelButton and cancelButton.setVisible then
                 cancelButton:setVisible(true)
+                if cancelButton.setActive then
+                    cancelButton:setActive(true)
+                    logging.writeLog("DEBUG", "Cancel button activated")
+                end
             else
                 logging.writeLog("WARN", "Screen 3 confirming: cancelButton invalid")
             end
@@ -311,7 +356,7 @@ local function updateUI()
             contentLabels[contentFirstLine]:setVisible(true)
         end
         -- Hide cancel button
-        -- logging.writeLog("DEBUG", "Screen 4: hiding cancel button")
+        logging.writeLog("DEBUG", "Screen 4: hiding cancel button")
         if cancelButton and cancelButton.setVisible then
             cancelButton:setVisible(false)
         else
