@@ -234,9 +234,15 @@ local function renderScreen3Confirming()
                 state.updateState({ lastSelectedPedestal = idx })
             end
             -- logging.writeLog("DEBUG", "Setting pedestal " .. idx .. " label: " .. label)
-            pcall(pedestals[idx].setItem, opt.item, label)
-            pcall(pedestals[idx].setItemRendered, true)
-            pcall(pedestals[idx].setLabelRendered, true)
+            if opt.item then
+                pcall(pedestals[idx].setItem, opt.item, label)
+                pcall(pedestals[idx].setItemRendered, true)
+                pcall(pedestals[idx].setLabelRendered, true)
+            else
+                pcall(pedestals[idx].setItem, "minecraft:air")
+                pcall(pedestals[idx].setItemRendered, false)
+                pcall(pedestals[idx].setLabelRendered, false)
+            end
         end
     end
 

@@ -67,7 +67,7 @@ local function updateSinglePedestal(idx, opt)
             pcall(pedestals[idx].setLabelRendered, false)
         end
     else
-        pcall(pedestals[idx].setItem, nil)
+        pcall(pedestals[idx].setItem, "minecraft:air")
         pcall(pedestals[idx].setItemRendered, false)
         pcall(pedestals[idx].setLabelRendered, false)
     end
@@ -84,7 +84,7 @@ local function clearSinglePedestal(idx)
         -- logging.writeLog("DEBUG", "clearSinglePedestal: pedestals[" .. idx .. "] is nil")
         return
     end
-    local ok, err = pcall(pedestals[idx].setItem, nil)
+    local ok, err = pcall(pedestals[idx].setItem, "minecraft:air")
     if not ok then
         logging.writeLog("WARN", "Pedestal " .. idx .. " setItem failed: " .. tostring(err))
     else
@@ -143,7 +143,7 @@ local function sequentialPedestalUpdate(options)
                 end
             else
                 -- logging.writeLog("DEBUG", "  setItem: nil")
-                pcall(pedestals[idx].setItem, nil)
+                pcall(pedestals[idx].setItem, "minecraft:air")
                 local ok, err = pcall(pedestals[idx].setItemRendered, false)
                 if not ok then logging.writeLog("WARN", "    setItemRendered(false) failed: " .. tostring(err)) end
                 local ok2, err2 = pcall(pedestals[idx].setLabelRendered, false)
@@ -159,7 +159,7 @@ local function sequentialPedestalUpdate(options)
         end
         if not used and pedestals[i] then
             -- logging.writeLog("DEBUG", "Clearing unused pedestal " .. i)
-            pcall(pedestals[i].setItem, nil)
+            pcall(pedestals[i].setItem, "minecraft:air")
             local ok1, err1 = pcall(pedestals[i].setItemRendered, false)
             local ok2, err2 = pcall(pedestals[i].setLabelRendered, false)
             if not ok1 then logging.writeLog("WARN", "  setItemRendered(false) failed: " .. tostring(err1)) end
@@ -254,6 +254,8 @@ local function setPedestalOptionsParallel(options)
             -- logging.writeLog("DEBUG", "setPedestalOptionsParallel: Timeout task after sleep")
             if not parallelCompleted then
                 logging.writeLog("WARN", "Parallel update timeout after " .. timeout .. " seconds, falling back to sequential")
+                -- Ensure parallel busy flag is cleared so other operations can continue
+                _parallelBusy = false
             end
         end
 
@@ -282,9 +284,10 @@ local function setPedestalOptionsParallel(options)
         -- logging.writeLog("DEBUG", "setPedestalOptionsParallel: parallel.waitForAny returned, ok=" .. tostring(ok) .. ", err=" .. tostring(err))
         if not ok then
             logging.writeLog("WARN", "parallel.waitForAny failed: " .. tostring(err))
+            _parallelBusy = false
+        else
+            _parallelBusy = false
         end
-
-        _parallelBusy = false
         -- logging.writeLog("DEBUG", "setPedestalOptionsParallel: parallelCompleted = " .. tostring(parallelCompleted))
 
         -- If parallel didn't complete (timeout triggered), run sequential fallback
@@ -398,10 +401,10 @@ local function clearPedestals()
             -- logging.writeLog("DEBUG", "parallel.waitForAny returned, ok=" .. tostring(ok) .. ", err=" .. tostring(err))
             if not ok then
                 logging.writeLog("WARN", "parallel.waitForAny failed: " .. tostring(err))
+                _parallelBusy = false
+            else
+                _parallelBusy = false
             end
-
-            -- logging.writeLog("DEBUG", "clearPedestals: Setting _parallelBusy = false")
-            _parallelBusy = false
             -- logging.writeLog("DEBUG", "parallelCompleted = " .. tostring(parallelCompleted))
 
             -- If parallel didn't complete (timeout triggered), run sequential fallback
