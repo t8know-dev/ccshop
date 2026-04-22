@@ -291,16 +291,19 @@ local function renderScreen4()
     state.resetToMainScreen()
 end
 
--- Rendering guard to prevent re-entrant rendering
+-- Rendering guard: prevents re-entrant rendering by spinning with os.sleep(0)
+-- When renderCurrentScreen is called while already rendering, it yields
+-- via os.sleep(0) until the current rendering completes, then proceeds.
+-- This ensures the cancel button (called from Basalt's coroutine) waits for
+-- the in-progress rendering to finish, then renders with the new state
+-- from the SAME coroutine that received the event (Basalt's).
 local _rendering = false
-local _pendingRender = false
 
 -- Update screen based on state
 local function renderCurrentScreen()
-    if _rendering then
-        _pendingRender = true
-        logging.writeLog("WARN", "renderCurrentScreen called while already rendering, queuing re-render")
-        return
+    -- Wait for any in-progress rendering to complete
+    while _rendering do
+        os.sleep(0)
     end
     _rendering = true
     local ok, err = pcall(function()
@@ -320,12 +323,7 @@ local function renderCurrentScreen()
     end)
     _rendering = false
     if not ok then
-        logging.writeLog("ERROR", "renderCurrentScreen failed: " .. tostring(err))
-    end
-    -- Re-render if a state change was queued during rendering
-    if _pendingRender then
-        _pendingRender = false
-        renderCurrentScreen()
+        pcall(logging.writeLog, "ERROR", "renderCurrentScreen failed: " .. tostring(err))
     end
 end
 
