@@ -2,20 +2,21 @@
 -- Exports: init(), handlePedestalClick(event, eventData), eventLoop(),
 --          getPedestalIndex(eventData), getSelectedCount(pedestalOption, eventData)
 
-local logging, state, screens, pedestal, peripherals, config
+local logging, state, screens, pedestal, peripherals, config, ui
 
 -- Local copies of mapping tables
 local pedestalIndexByName, pedestalObjectToIndex
 local PAYMENT_TIMEOUT
 
 -- Initialize module with dependencies
-local function init(loggingModule, stateModule, screensModule, pedestalModule, peripheralsModule, configModule)
+local function init(loggingModule, stateModule, screensModule, pedestalModule, peripheralsModule, configModule, uiModule)
     logging = loggingModule
     state = stateModule
     screens = screensModule
     pedestal = pedestalModule
     peripherals = peripheralsModule
     config = configModule
+    ui = uiModule
     pedestalIndexByName = peripherals.getPedestalIndexByName()
     pedestalObjectToIndex = peripherals.getPedestalObjectToIndex()
     PAYMENT_TIMEOUT = config.get("PAYMENT_TIMEOUT")
@@ -265,6 +266,21 @@ local function eventLoop()
             -- Pedestal click events from display_pedestal peripheral
             if event == "pedestal_left_click" or event == "pedestal_right_click" then
                 handlePedestalClick(event, eventData)
+
+            -- Timer events for cancel button async operations
+            elseif event == "timer" then
+                local timerId = eventData[2]
+                -- Check if this is the cancel button reset timer
+                if ui and ui.getCancelButtonResetTimerId and
+                   ui.getCancelButtonResetTimerId() == timerId then
+                    logging.writeLog("DEBUG", "Processing async cancel button reset")
+                    state.resetToMainScreen()
+                -- Check if this is the cancel button color restoration timer
+                elseif ui and ui.getCancelButtonTimerId and
+                   ui.getCancelButtonTimerId() == timerId then
+                    logging.writeLog("DEBUG", "Processing cancel button color restoration timer")
+                    ui.restoreCancelButtonColor(timerId)
+                end
             end
         end)
         if not ok then
