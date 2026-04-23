@@ -9,9 +9,19 @@ local contentFirstLine = 3  -- default, may be increased if monitor height allow
 local contentLastLine = 9
 local spursToCoins = _G.spursToCoins
 
--- Cancel button debouncing (no async timer — direct state reset from onClick)
+-- Cancel button debouncing and async timer
 local _cancelButtonLastClick = 0
-local _cancelButtonDebounceMs = 500  -- milliseconds
+local _cancelButtonDebounceMs = 500
+local _cancelButtonTimerId = nil
+
+-- Timer management functions (called from events.lua)
+local function getCancelButtonTimerId()
+    return _cancelButtonTimerId
+end
+
+local function resetCancelButtonTimerId()
+    _cancelButtonTimerId = nil
+end
 
 -- Initialize module with dependencies
 local function init(loggingModule, peripheralsModule, configModule, stateModule, basaltModule)
@@ -147,10 +157,10 @@ local function createUI()
             end
             _cancelButtonLastClick = now
 
-            -- Immediate visual feedback: hide button, play sound
+            -- Visual feedback: gray the button (don't hide — needs to remain clickable
+            -- if the async timer is consumed by os.sleep in renderScreen3Confirming)
             if cancelButton then
                 pcall(cancelButton.setBackground, cancelButton, colors.gray)
-                pcall(cancelButton.setVisible, cancelButton, false)
             end
             peripherals.playNoteblockSoundLow()
 
@@ -159,8 +169,15 @@ local function createUI()
                 peripherals.lockDepositor()
             end
 
-            -- Reset state directly (no async timer — Basalt coroutine can yield for peripheral calls)
-            state.resetToMainScreen()
+            -- Async state reset via timer (runs in eventLoop coroutine, avoiding
+            -- Basalt coroutine issues with nested event loops in pedestal operations)
+            local ok, id = pcall(os.startTimer, 0.05)
+            if ok then
+                _cancelButtonTimerId = id
+            else
+                -- Fallback: direct reset if timer fails
+                state.resetToMainScreen()
+            end
         end)
     -- logging.writeLog("DEBUG", "Cancel button created: " .. tostring(cancelButton) .. " at line " .. (height - 3))
     if cancelButton and cancelButton.setVisible then
@@ -370,5 +387,7 @@ return {
     updateUI = updateUI,
     getFrame = getFrame,
     getCancelButton = getCancelButton,
-    getHintLabel = getHintLabel
+    getHintLabel = getHintLabel,
+    getCancelButtonTimerId = getCancelButtonTimerId,
+    resetCancelButtonTimerId = resetCancelButtonTimerId
 }

@@ -2,20 +2,21 @@
 -- Exports: init(), handlePedestalClick(event, eventData), eventLoop(),
 --          getPedestalIndex(eventData), getSelectedCount(pedestalOption, eventData)
 
-local logging, state, screens, pedestal, peripherals, config
+local logging, state, screens, pedestal, peripherals, config, ui
 
 -- Local copies of mapping tables
 local pedestalIndexByName, pedestalObjectToIndex
 local PAYMENT_TIMEOUT
 
 -- Initialize module with dependencies
-local function init(loggingModule, stateModule, screensModule, pedestalModule, peripheralsModule, configModule)
+local function init(loggingModule, stateModule, screensModule, pedestalModule, peripheralsModule, configModule, uiModule)
     logging = loggingModule
     state = stateModule
     screens = screensModule
     pedestal = pedestalModule
     peripherals = peripheralsModule
     config = configModule
+    ui = uiModule
     pedestalIndexByName = peripherals.getPedestalIndexByName()
     pedestalObjectToIndex = peripherals.getPedestalObjectToIndex()
     PAYMENT_TIMEOUT = config.get("PAYMENT_TIMEOUT")
@@ -265,6 +266,15 @@ local function eventLoop()
             -- Pedestal click events from display_pedestal peripheral
             if event == "pedestal_left_click" or event == "pedestal_right_click" then
                 handlePedestalClick(event, eventData)
+
+            -- Timer events for cancel button async reset
+            elseif event == "timer" then
+                local timerId = eventData[2]
+                if ui and ui.getCancelButtonTimerId and
+                   ui.getCancelButtonTimerId() == timerId then
+                    ui.resetCancelButtonTimerId()
+                    state.resetToMainScreen()
+                end
             end
         end)
         if not ok then

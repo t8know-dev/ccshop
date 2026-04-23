@@ -49,8 +49,8 @@ ui.init(logging, peripherals, config, state, basalt)
 -- Initialize screens (depends on pedestal, ui, peripherals, config, state, db)
 screens.init(logging, pedestal, ui, peripherals, config, state, db)
 
--- Initialize events (depends on state, screens, pedestal, peripherals, logging, config)
-events.init(logging, state, screens, pedestal, peripherals, config)
+-- Initialize events (depends on state, screens, pedestal, peripherals, logging, config, ui)
+events.init(logging, state, screens, pedestal, peripherals, config, ui)
 
 -- Initialize payment (depends on state, peripherals, screens, config, logging)
 payment.init(logging, state, peripherals, screens, config)
