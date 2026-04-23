@@ -16,10 +16,7 @@ local _cancelButtonDebounceMs = 500  -- milliseconds
 local _cancelButtonJustClicked = false  -- true for 200ms after click to keep visible for feedback
 
 -- Cancel button timer tracking
-local _cancelButtonTimerId = nil
 local _cancelButtonResetTimerId = nil
-local _cancelButtonTimerStart = 0
-local _cancelButtonTimerDuration = 0.2  -- 200ms for color restoration
 local _cancelButtonResetTimerDuration = 0.05  -- 50ms for async reset
 
 -- Initialize module with dependencies
@@ -166,17 +163,6 @@ local function createUI()
             logging.writeLog("DEBUG", "Cancel button click accepted, processing started (last click: " ..
                 tostring(_cancelButtonLastClick) .. ", debounce ms: " .. _cancelButtonDebounceMs .. ")")
 
-            -- Cancel any existing timer
-            if _cancelButtonTimerId then
-                local cancelOk, cancelErr = pcall(os.cancelTimer, _cancelButtonTimerId)
-                if cancelOk then
-                    logging.writeLog("DEBUG", "Cancelled previous timer ID " .. tostring(_cancelButtonTimerId))
-                else
-                    logging.writeLog("WARN", "Failed to cancel previous timer: " .. tostring(cancelErr))
-                end
-                _cancelButtonTimerId = nil
-            end
-
             -- Immediate visual feedback: change button color to gray
             logging.writeLog("DEBUG", "Attempting to set cancel button color to gray for visual feedback")
             if cancelButton and cancelButton.setBackground then
@@ -213,7 +199,7 @@ local function createUI()
                 peripherals.lockDepositor()
             end
 
-            -- Queue async reset via timer (safer than custom event for os.pullEvent compatibility)
+            -- Queue async reset via timer
             logging.writeLog("DEBUG", "Starting reset timer for async processing (duration: " ..
                 tostring(_cancelButtonResetTimerDuration) .. "s)")
             local resetTimerOk, resetTimerIdOrErr = pcall(os.startTimer, _cancelButtonResetTimerDuration)
@@ -222,18 +208,6 @@ local function createUI()
                 logging.writeLog("DEBUG", "Reset timer started with ID " .. tostring(_cancelButtonResetTimerId))
             else
                 logging.writeLog("ERROR", "Failed to start reset timer: " .. tostring(resetTimerIdOrErr))
-            end
-
-            -- Start timer for color restoration and flag reset (fires after reset is processed)
-            logging.writeLog("DEBUG", "Starting timer for color restoration (duration: " ..
-                tostring(_cancelButtonTimerDuration) .. "s)")
-            local timerOk, timerIdOrErr = pcall(os.startTimer, _cancelButtonTimerDuration)
-            if timerOk then
-                _cancelButtonTimerId = timerIdOrErr
-                _cancelButtonTimerStart = now
-                logging.writeLog("DEBUG", "Timer started with ID " .. tostring(_cancelButtonTimerId))
-            else
-                logging.writeLog("ERROR", "Failed to start timer: " .. tostring(timerIdOrErr))
                 -- Reset flags immediately if timer fails
                 _cancelButtonJustClicked = false
                 _cancelButtonProcessing = false
@@ -300,37 +274,22 @@ local function updateUI()
             logging.writeLog("WARN", "Safety: resetting stuck cancel button processing flag (>2s since last click)")
             _cancelButtonProcessing = false
             _cancelButtonJustClicked = false
-            _cancelButtonTimerId = nil
             _cancelButtonResetTimerId = nil
         end
 
-        -- Hide cancel button unless it was just clicked (keep visible for feedback)
-        if _cancelButtonJustClicked then
-            logging.writeLog("DEBUG", "Screen 1: cancel button just clicked, keeping visible with gray color")
-            if cancelButton and cancelButton.setVisible then
-                cancelButton:setVisible(true)
-                if cancelButton.setBackground then
-                    logging.writeLog("DEBUG", "Screen 1: setting cancel button background to gray")
-                    cancelButton:setBackground(colors.gray)  -- Keep gray for feedback
-                end
-                if cancelButton.setForeground then
-                    cancelButton:setForeground(colors.white)
-                end
+        -- Hide cancel button on screen 1
+        logging.writeLog("DEBUG", "Screen 1: hiding cancel button")
+        if cancelButton and cancelButton.setVisible then
+            -- Reset color to red before hiding for next time
+            if cancelButton.setBackground then
+                logging.writeLog("DEBUG", "Screen 1: setting cancel button background to red before hide")
+                cancelButton:setBackground(colors.red)
             end
+            cancelButton:setVisible(false)
+            -- Ensure processing flag is reset when button hidden (safety)
+            _cancelButtonProcessing = false
         else
-            logging.writeLog("DEBUG", "Screen 1: hiding cancel button")
-            if cancelButton and cancelButton.setVisible then
-                -- Reset color to red before hiding for next time
-                if cancelButton.setBackground then
-                    logging.writeLog("DEBUG", "Screen 1: setting cancel button background to red before hide")
-                    cancelButton:setBackground(colors.red)
-                end
-                cancelButton:setVisible(false)
-                -- Ensure processing flag is reset when button hidden (safety)
-                _cancelButtonProcessing = false
-            else
-                logging.writeLog("WARN", "Screen 1: cancelButton invalid")
-            end
+            logging.writeLog("WARN", "Screen 1: cancelButton invalid")
         end
 
     elseif screen == 2 then
@@ -474,64 +433,16 @@ local function getCancelButton() return cancelButton end
 local function getHintLabel() return contentLabels[contentFirstLine] end  -- Return first content label for error messages
 
 -- Timer management for cancel button
-local function getCancelButtonTimerId()
-    return _cancelButtonTimerId
-end
-
 local function getCancelButtonResetTimerId()
     return _cancelButtonResetTimerId
 end
 
-local function restoreCancelButtonColor(timerId)
-    -- Check if this is our timer
-    if timerId ~= _cancelButtonTimerId then
-        logging.writeLog("DEBUG", "Timer ID " .. tostring(timerId) .. " does not match current timer " .. tostring(_cancelButtonTimerId) .. ", ignoring")
-        return
-    end
-
-    logging.writeLog("DEBUG", "Processing cancel button color restoration timer")
-
-    -- Reset flags
+-- Reset cancel button state flags (called from events.lua before resetToMainScreen)
+local function resetCancelButtonState()
+    logging.writeLog("DEBUG", "Resetting cancel button state flags")
     _cancelButtonJustClicked = false
     _cancelButtonProcessing = false
-    _cancelButtonTimerId = nil
     _cancelButtonResetTimerId = nil
-
-    -- Safety: if state wasn't reset by eventLoop (e.g. Basalt consumed the event),
-    -- reset it now directly
-    local currentScreen = state.getState("screen")
-    if currentScreen ~= 1 then
-        logging.writeLog("WARN", "Cancel button timer expired but screen is still " ..
-            tostring(currentScreen) .. ", state may not have been reset")
-        state.resetToMainScreen()
-        -- Return early; updateUI will handle button visibility
-        return
-    end
-
-    -- Restore red color if button is visible
-    if cancelButton and cancelButton.setBackground then
-        if currentScreen == 2 or currentScreen == 3 then
-            -- On screens 2 and 3 button should be visible and red
-            logging.writeLog("DEBUG", "Restoring cancel button to red (screen " .. tostring(currentScreen) .. ")")
-            cancelButton:setBackground(colors.red)
-            -- Ensure button is visible (should already be)
-            if cancelButton.setVisible then
-                cancelButton:setVisible(true)
-            end
-        else
-            -- On screen 1 or 4 button should be hidden
-            logging.writeLog("DEBUG", "Cancel button not needed on screen " .. tostring(currentScreen) .. ", hiding")
-            if cancelButton.setVisible then
-                cancelButton:setVisible(false)
-            end
-            -- Trigger UI update to ensure button visibility is correct on screen 1
-            if currentScreen == 1 then
-                updateUI()
-            end
-        end
-    else
-        logging.writeLog("WARN", "Cancel button or setBackground missing during color restoration")
-    end
 end
 
 return {
@@ -541,7 +452,6 @@ return {
     getFrame = getFrame,
     getCancelButton = getCancelButton,
     getHintLabel = getHintLabel,
-    getCancelButtonTimerId = getCancelButtonTimerId,
     getCancelButtonResetTimerId = getCancelButtonResetTimerId,
-    restoreCancelButtonColor = restoreCancelButtonColor
+    resetCancelButtonState = resetCancelButtonState
 }

@@ -267,19 +267,15 @@ local function eventLoop()
             if event == "pedestal_left_click" or event == "pedestal_right_click" then
                 handlePedestalClick(event, eventData)
 
-            -- Timer events for cancel button async operations
+            -- Timer events for cancel button async reset
             elseif event == "timer" then
                 local timerId = eventData[2]
-                -- Check if this is the cancel button reset timer
                 if ui and ui.getCancelButtonResetTimerId and
                    ui.getCancelButtonResetTimerId() == timerId then
-                    logging.writeLog("DEBUG", "Processing async cancel button reset")
+                    logging.writeLog("DEBUG", "Processing cancel button reset timer")
+                    -- Reset flags BEFORE state reset so updateUI() won't show the button
+                    ui.resetCancelButtonState()
                     state.resetToMainScreen()
-                -- Check if this is the cancel button color restoration timer
-                elseif ui and ui.getCancelButtonTimerId and
-                   ui.getCancelButtonTimerId() == timerId then
-                    logging.writeLog("DEBUG", "Processing cancel button color restoration timer")
-                    ui.restoreCancelButtonColor(timerId)
                 end
             end
         end)
