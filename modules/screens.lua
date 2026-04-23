@@ -299,34 +299,33 @@ local _rendering = false
 local _pendingRender = false
 local _lastRenderedScreen = nil
 local _lastRenderedSubState = nil
+local _lastRenderedQty = nil
 
 -- Update screen based on state
 local function renderCurrentScreen()
     local screen = state.getState("screen")
     local subState = state.getState("subState")
+    local selectedQty = state.getState("selectedQty")
 
-    -- If already rendering, check if screen/subState actually changed
+    -- If already rendering, check if a meaningful change happened
     if _rendering then
-        -- Only queue a pending render if the screen or subState will be different
-        -- from what was last rendered (or is currently being rendered)
-        if screen ~= _lastRenderedScreen or subState ~= _lastRenderedSubState then
-            logging.writeLog("WARN", "renderCurrentScreen called while already rendering, queuing pending render (screen=" ..
-                tostring(screen) .. ", subState=" .. tostring(subState) .. ")")
+        if screen ~= _lastRenderedScreen or subState ~= _lastRenderedSubState or selectedQty ~= _lastRenderedQty then
+            logging.writeLog("WARN", "renderCurrentScreen called while already rendering, queuing pending render")
             _pendingRender = true
         else
-            logging.writeLog("DEBUG", "renderCurrentScreen called while already rendering, but screen/subState unchanged, skipping")
+            logging.writeLog("DEBUG", "renderCurrentScreen called while already rendering, unchanged, skipping")
         end
         return
     end
 
-    -- Check if the screen/subState actually changed since last render
-    if screen == _lastRenderedScreen and subState == _lastRenderedSubState then
-        logging.writeLog("DEBUG", "renderCurrentScreen: screen/subState unchanged, skipping render")
+    -- Skip if nothing meaningful changed (also track selectedQty for confirming state quantity changes)
+    if screen == _lastRenderedScreen and subState == _lastRenderedSubState and selectedQty == _lastRenderedQty then
+        logging.writeLog("DEBUG", "renderCurrentScreen: screen/subState/qty unchanged, skipping render")
         return
     end
     _rendering = true
     local ok, err = pcall(function()
-        logging.writeLog("INFO", "renderCurrentScreen called - screen=" .. tostring(screen) .. " subState=" .. tostring(subState))
+        logging.writeLog("INFO", "renderCurrentScreen called - screen=" .. tostring(screen) .. " subState=" .. tostring(subState) .. " qty=" .. tostring(selectedQty))
         state.updateState({ lastActivity = os.clock() })
         if screen == 1 then renderScreen1()
         elseif screen == 2 then renderScreen2()
@@ -340,6 +339,7 @@ local function renderCurrentScreen()
         -- Remember what we just rendered
         _lastRenderedScreen = screen
         _lastRenderedSubState = subState
+        _lastRenderedQty = selectedQty
     end)
     _rendering = false
     -- After rendering completes, check if a pending render was requested

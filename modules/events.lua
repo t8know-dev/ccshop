@@ -2,21 +2,20 @@
 -- Exports: init(), handlePedestalClick(event, eventData), eventLoop(),
 --          getPedestalIndex(eventData), getSelectedCount(pedestalOption, eventData)
 
-local logging, state, screens, pedestal, peripherals, config, ui
+local logging, state, screens, pedestal, peripherals, config
 
 -- Local copies of mapping tables
 local pedestalIndexByName, pedestalObjectToIndex
 local PAYMENT_TIMEOUT
 
 -- Initialize module with dependencies
-local function init(loggingModule, stateModule, screensModule, pedestalModule, peripheralsModule, configModule, uiModule)
+local function init(loggingModule, stateModule, screensModule, pedestalModule, peripheralsModule, configModule)
     logging = loggingModule
     state = stateModule
     screens = screensModule
     pedestal = pedestalModule
     peripherals = peripheralsModule
     config = configModule
-    ui = uiModule
     pedestalIndexByName = peripherals.getPedestalIndexByName()
     pedestalObjectToIndex = peripherals.getPedestalObjectToIndex()
     PAYMENT_TIMEOUT = config.get("PAYMENT_TIMEOUT")
@@ -266,17 +265,6 @@ local function eventLoop()
             -- Pedestal click events from display_pedestal peripheral
             if event == "pedestal_left_click" or event == "pedestal_right_click" then
                 handlePedestalClick(event, eventData)
-
-            -- Timer events for cancel button async reset
-            elseif event == "timer" then
-                local timerId = eventData[2]
-                if ui and ui.getCancelButtonResetTimerId and
-                   ui.getCancelButtonResetTimerId() == timerId then
-                    logging.writeLog("DEBUG", "Processing cancel button reset timer")
-                    -- Reset flags BEFORE state reset so updateUI() won't show the button
-                    ui.resetCancelButtonState()
-                    state.resetToMainScreen()
-                end
             end
         end)
         if not ok then
