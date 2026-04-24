@@ -8,7 +8,7 @@
 local logging, config
 
 -- Peripheral wrappers & cache
-local relayLock, ae2Adapter, depositor, speaker, monitor, pedestals
+local relayLock, ae2Adapter, craftingAdapter, depositor, speaker, monitor, pedestals
 local pedestalIndexByName, pedestalObjectToIndex
 local ae2Cache = {
     timestamp = 0,
@@ -38,6 +38,17 @@ local function initPeripherals()
     speaker = peripheral.wrap(SPEAKER_NAME)
     -- logging.writeLog("DEBUG", "SPEAKER wrapped: " .. tostring(speaker))
     monitor = peripheral.wrap(MONITOR)
+
+    -- Crafting adapter (separate AE2 system for item dispensing)
+    craftingAdapter = peripheral.wrap(CRAFTING_ADAPTER)
+    if not craftingAdapter then
+        craftingAdapter = peripheral.find("ae2cc_adapter")
+    end
+    if craftingAdapter then
+        logging.writeLog("INFO", "Crafting adapter wrapped: " .. CRAFTING_ADAPTER)
+    else
+        logging.writeLog("WARN", "Crafting adapter not found, crafting will fall back to mock dispense")
+    end
     -- logging.writeLog("DEBUG", "MONITOR wrapped: " .. tostring(monitor))
     pedestals = {}
     for i, name in ipairs(PEDESTALS) do
@@ -207,6 +218,7 @@ local function getPedestalIndexByName() return pedestalIndexByName end
 local function getPedestalObjectToIndex() return pedestalObjectToIndex end
 local function getRelayLock() return relayLock end
 local function getAe2Adapter() return ae2Adapter end
+local function getCraftingAdapter() return craftingAdapter end
 local function getDepositor() return depositor end
 local function getSpeaker() return speaker end
 local function getMonitor() return monitor end
@@ -228,6 +240,7 @@ return {
     getPedestalObjectToIndex = getPedestalObjectToIndex,
     getRelayLock = getRelayLock,
     getAe2Adapter = getAe2Adapter,
+    getCraftingAdapter = getCraftingAdapter,
     getDepositor = getDepositor,
     getSpeaker = getSpeaker,
     getMonitor = getMonitor

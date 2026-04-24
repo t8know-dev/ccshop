@@ -20,6 +20,13 @@ local state = {
     paymentDeadline = nil,    -- os.clock() deadline for payment timeout
     paymentPaid = false,
     paymentCheckCount = 0,    -- counter for payment detection checks
+    -- Crafting fields
+    craftingJobId = nil,
+    craftingStatus = nil,     -- nil, "starting", "in_progress", "completed", "failed", "cancelled"
+    craftedObjects = 0,
+    totalObjects = 0,
+    craftingStartTime = nil,
+    craftingLastUpdate = nil,
 }
 
 local subscribers = {}
@@ -106,6 +113,12 @@ local function resetState()
         paymentDeadline = nil,
         paymentPaid = false,
         paymentCheckCount = 0,
+        craftingJobId = nil,
+        craftingStatus = nil,
+        craftedObjects = 0,
+        totalObjects = 0,
+        craftingStartTime = nil,
+        craftingLastUpdate = nil,
     }
     updateState(initialState)
 end
@@ -133,7 +146,13 @@ local function resetToMainScreen()
         paymentDeadline = nil,
         currentOptions = {},
         currentPedestalIndices = {},
-        lastSelectedPedestal = nil
+        lastSelectedPedestal = nil,
+        craftingJobId = nil,
+        craftingStatus = nil,
+        craftedObjects = 0,
+        totalObjects = 0,
+        craftingStartTime = nil,
+        craftingLastUpdate = nil,
     })
 end
 

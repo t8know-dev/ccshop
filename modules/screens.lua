@@ -2,7 +2,7 @@
 -- Exports: init(), renderScreen1(), renderScreen2(), renderScreen3Selecting(),
 --          renderScreen3Confirming(), renderScreen4(), renderCurrentScreen()
 
-local logging, pedestal, ui, peripherals, config, state, db, MSG
+local logging, pedestal, ui, peripherals, config, state, db, MSG, crafting
 local CATEGORIES = _G.CATEGORIES or {}
 local MATERIALS = _G.MATERIALS or {}
 local QUANTITIES = _G.QUANTITIES or {}
@@ -13,7 +13,7 @@ local findQuantityIndex = _G.findQuantityIndex
 local calculatePriceWithDiscount = _G.calculatePriceWithDiscount
 
 -- Initialize module with dependencies
-local function init(loggingModule, pedestalModule, uiModule, peripheralsModule, configModule, stateModule, dbModule)
+local function init(loggingModule, pedestalModule, uiModule, peripheralsModule, configModule, stateModule, dbModule, craftingModule)
     logging = loggingModule
     pedestal = pedestalModule
     ui = uiModule
@@ -21,6 +21,7 @@ local function init(loggingModule, pedestalModule, uiModule, peripheralsModule, 
     config = configModule
     state = stateModule
     db = dbModule
+    crafting = craftingModule
     -- logging.writeLog("DEBUG", "Screens init called, getting MSG from config")
     MSG = configModule.get("MSG")
     -- logging.writeLog("DEBUG", "Screens init: MSG = " .. tostring(MSG))
@@ -257,8 +258,20 @@ local function renderScreen3Confirming()
     logging.writeLog("INFO", "Payment deadline: " .. tostring(state.getState("paymentDeadline")) .. " (current time: " .. os.clock() .. ")")
 end
 
--- Screen 4: Thank you
+-- Re-entrancy guard for renderScreen4.
+-- Prevents double execution when startCrafting() triggers state changes
+-- (craftingStatus → "starting"/"in_progress") that queue a pending render.
+local _renderScreen4Running = false
+
+-- Screen 4: Thank you / Crafting
 local function renderScreen4()
+    -- Guard: prevent re-entry from pending render triggered by craftingStatus state changes
+    if _renderScreen4Running then
+        logging.writeLog("DEBUG", "renderScreen4: re-entry guard, skipping")
+        return
+    end
+    _renderScreen4Running = true
+
     -- Clear pedestals and update UI sequentially
     executeSequential(
         function() ui.updateUI() end,
@@ -279,16 +292,27 @@ local function renderScreen4()
         qty = selectedQty,
         price = calculatedPrice or math.floor(selectedMaterial.basePrice * (selectedQty / selectedMaterial.minQty))
     }
-    -- db is loaded in main script; we need to access it. For now, we'll assume global db.log exists.
     pcall(db.log, record)
     -- Refresh AE2 cache after purchase (stock changed)
     peripherals.refreshAE2Cache()
-    -- Mock dispense
-    logging.writeLog("INFO", "[MOCK] Dispense " .. selectedQty .. "x " .. selectedMaterial.item)
-    -- Auto-return to screen 1 after CONFIRM_DELAY seconds
-    os.sleep(CONFIRM_DELAY)
-    -- logging.writeLog("DEBUG", "Screen 4 auto-return, resetting to main screen")
-    state.resetToMainScreen()
+
+    -- Start crafting via dedicated dispensing AE2 system
+    local craftingStarted = crafting.startCrafting()
+
+    if not craftingStarted then
+        logging.writeLog("WARN", "Crafting failed to start, falling back to mock dispense")
+        logging.writeLog("INFO", "[MOCK] Dispense " .. selectedQty .. "x " .. selectedMaterial.item)
+        _renderScreen4Running = false
+        os.sleep(CONFIRM_DELAY)
+        state.resetToMainScreen()
+        return
+    end
+
+    -- Crafting started — UI will be updated by state subscriber on craftingStatus changes
+    -- craftingMonitorLoop handles timing, progress polling, and auto-return
+    logging.writeLog("INFO", "Crafting started successfully, monitor loop will handle completion")
+
+    _renderScreen4Running = false
 end
 
 -- Rendering guard: prevents re-entrant rendering.
@@ -300,16 +324,18 @@ local _pendingRender = false
 local _lastRenderedScreen = nil
 local _lastRenderedSubState = nil
 local _lastRenderedQty = nil
+local _lastRenderedCraftingStatus = nil
 
 -- Update screen based on state
 local function renderCurrentScreen()
     local screen = state.getState("screen")
     local subState = state.getState("subState")
     local selectedQty = state.getState("selectedQty")
+    local craftingStatus = state.getState("craftingStatus")
 
     -- If already rendering, check if a meaningful change happened
     if _rendering then
-        if screen ~= _lastRenderedScreen or subState ~= _lastRenderedSubState or selectedQty ~= _lastRenderedQty then
+        if screen ~= _lastRenderedScreen or subState ~= _lastRenderedSubState or selectedQty ~= _lastRenderedQty or craftingStatus ~= _lastRenderedCraftingStatus then
             logging.writeLog("WARN", "renderCurrentScreen called while already rendering, queuing pending render")
             _pendingRender = true
         else
@@ -319,7 +345,7 @@ local function renderCurrentScreen()
     end
 
     -- Skip if nothing meaningful changed (also track selectedQty for confirming state quantity changes)
-    if screen == _lastRenderedScreen and subState == _lastRenderedSubState and selectedQty == _lastRenderedQty then
+    if screen == _lastRenderedScreen and subState == _lastRenderedSubState and selectedQty == _lastRenderedQty and craftingStatus == _lastRenderedCraftingStatus then
         logging.writeLog("DEBUG", "renderCurrentScreen: screen/subState/qty unchanged, skipping render")
         return
     end
@@ -340,6 +366,7 @@ local function renderCurrentScreen()
         _lastRenderedScreen = screen
         _lastRenderedSubState = subState
         _lastRenderedQty = selectedQty
+        _lastRenderedCraftingStatus = craftingStatus
     end)
     _rendering = false
     -- After rendering completes, check if a pending render was requested

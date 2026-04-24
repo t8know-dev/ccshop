@@ -2,7 +2,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **CC:Tweaked (ComputerCraft Tweaked)** Lua application for modded Minecraft. It implements an interactive item display shop using physical pedestals and a monitor UI. The shop supports multiple categories, materials, quantity selection, and payment via Numismatics depositor, integrated with Applied Energistics 2 (AE2) for stock checking.
+This is a **CC:Tweaked (ComputerCraft Tweaked)** Lua application for modded Minecraft. It implements an interactive item display shop using physical pedestals and a monitor UI. The shop supports multiple categories, materials, quantity selection with bulk discounts, and payment via Numismatics depositor, integrated with Applied Energistics 2 (AE2) for stock checking.
 
 ## Running the Code
 
@@ -21,16 +21,16 @@ The system is split across multiple Lua files for modularity:
 
 - **shop.lua** — Main orchestrator that loads modules and runs the main loops.
 - **config.lua** — Peripheral names, messages, timeouts, pedestal list, and validation function.
-- **items.lua** — Categories, materials, quantity tiers, price definitions, and helper functions.
+- **items.lua** — Categories, materials, quantity tiers, bulk discount config, currency conversion, and helper functions.
 - **db.lua** — Purchase logging (ndjson format) to `/ccshop/purchases.json`.
 - **modules/** — Modular components with single responsibilities:
   - **logging.lua** — Logging utilities with log level control.
   - **config.lua** — Enhanced configuration loading and validation.
-  - **peripherals.lua** — Peripheral management, AE2 cache, relay helpers.
+  - **peripherals.lua** — Peripheral management, AE2 cache, speaker, relay helpers.
   - **state.lua** — Centralized state management with observer pattern and reset functions.
-  - **pedestal.lua** — Pedestal rendering and management.
-  - **ui.lua** — Basalt UI creation and updates.
-  - **screens.lua** — Screen rendering logic.
+  - **pedestal.lua** — Pedestal rendering and management (custom coroutine scheduler).
+  - **ui.lua** — Basalt UI creation and updates (fixed coordinate positioning).
+  - **screens.lua** — Screen rendering logic (with re-entrancy guard).
   - **events.lua** — Event handling and state transitions.
   - **payment.lua** — Payment detection and idle timeout monitoring.
 
@@ -40,30 +40,33 @@ The modules use dependency injection to avoid circular dependencies and enable t
 
 The shop operates as a four‑screen state machine with Screen 3 having two sub‑states:
 
-1. **Category selection** — Welcome screen. Pedestals show category icons (iron, certus quartz, redstone, dye). Right‑click selects a category. No cancel button. Idle timeout does not apply.
+1. **Category selection** — Welcome screen. Pedestals show category icons (iron, certus quartz, redstone, dye). Monitor shows bulk discount info and instructions. Right‑click selects a category. No cancel button. Idle timeout does not apply.
 
 2. **Material selection** — Shows only materials belonging to the chosen category that have sufficient stock in AE2. Right‑click selects a material, left‑click returns to category selection. Cancel button visible.
 
 3. **Quantity selection and payment** — Two sub‑states:
-   - **3A: Selecting a quantity** — Pedestals show available quantity tiers (from `minQty` up to AE2 stock). Right‑click chooses a quantity, left‑click returns to material selection. Cancel button visible.
-   - **3B: Awaiting payment** — Triggered immediately after quantity selection. Selected pedestal label changes to `"[<qty>]"`. Depositor is configured and unlocked. Monitor shows calculated price and insert instruction. Cancel button visible.
+   - **3A: Selecting a quantity** — Pedestals show available quantity tiers (from `minQty` up to AE2 stock). Monitor shows base price and hint. Right‑click selects a quantity (transitions immediately to confirming), left‑click returns to material selection. Cancel button visible.
+   - **3B: Awaiting payment** — Triggered immediately after quantity selection. Selected pedestal label changes to `"[<qty>]"`. Depositor price is configured and depositor unlocked. Monitor shows detailed payment breakdown: base price formula, price calculation, discount amount, total, coin insert instruction, and pedestal instruction. Cancel button visible.
 
-4. **Thank‑you screen** — Plays a harp sound, logs the purchase, mocks item dispensing, and auto‑returns to screen 1 after `CONFIRM_DELAY` seconds. No cancel button.
+4. **Thank‑you screen** — Plays a harp F sound, logs the purchase, mocks item dispensing, refreshes AE2 cache, and auto‑returns to screen 1 after `CONFIRM_DELAY` seconds. No cancel button.
 
 ### Peripheral Integration
 
 - **Display pedestals** (Pedestals mod) — Show items/labels, receive `pedestal_left_click`/`pedestal_right_click` events.
-- **AE2 adapter** (`ae2cc_adapter`) — Queries available stock for material items.
-- **Numismatics depositor** — Accepts spur currency, signals payment via redstone relay.
-- **Speaker** (`speaker_212`) — Plays harp sound for selection confirm (right‑click) and bass sound for cancel/back actions (left‑click, cancel button).
-- **Monitor** — Shows Basalt UI with header, hint line, and cancel button.
+- **AE2 adapter** (`ae2cc_adapter_14`) — Queries available stock for material items. Cache refreshed every `AE2_CACHE_TTL` (30 s) and after purchases.
+- **Numismatics depositor** (`Numismatics_Depositor_8`) — Accepts Spur currency (spurs, bevels, sprockets, cogs, crowns, suns), sends payment signal via redstone relay.
+- **Redstone relay** (`redstone_relay_38`) — Locks/unlocks depositor (`bottom` output). Payment detection on `bottom` input (or configured `PAYMENT_DETECTION_SIDE`).
+- **Speaker** (`speaker_212`) — Plays `"harp"` instrument, pitch 11 (F note) for selection confirm (right‑click). Plays `"bass"` instrument, pitch 11 (F note) for cancel/back actions (left‑click, cancel button).
+- **Monitor** (`monitor_1012`) — Shows fixed‑coordinate Basalt UI with header bar, content labels, and cancel button.
 
 ### Concurrency
 
 The main orchestrator runs three coroutines in parallel using `parallel.waitForAny`:
-- `basalt.run()` — Basalt UI main loop.
-- `events.eventLoop` — Listens for pedestal click events and handles state transitions.
+- `basalt.run()` — Basalt UI main loop (handles monitor touch events, cancel button onClick).
+- `events.eventLoop` — Listens for pedestal click events and timer events (cancel button async reset).
 - `payment.paymentMonitorLoop` — Monitors payment detection and idle timeouts.
+
+Pedestal rendering uses a **custom coroutine scheduler** with event re-queuing to avoid nested `parallel.waitForAll` issues. See [`parallel_execution.md`](./parallel_execution.md) for detailed documentation on the concurrency model.
 
 ## Key Data Structures
 
@@ -108,25 +111,62 @@ MATERIALS = {
 ```lua
 QUANTITIES = { 1, 8, 32, 64, 256, 512, 1024, "4k", "16k", "32k" }
 ```
-Helpers `quantityToNumber(qty)` and `findQuantityIndex(num)` convert between string/numeric representations.
+Helpers `quantityToNumber(qty)`, `findQuantityIndex(num)`, and `numericQuantities()` convert between string/numeric representations.
+
+### Bulk Discounts (`items.lua`)
+```lua
+DISCOUNT_LEVELS = {
+    {level = 0, percent = 0},
+    {level = 1, percent = 2},
+    {level = 2, percent = 5},
+    {level = 3, percent = 10},
+    {level = 4, percent = 15},
+    {level = 5, percent = 20},  -- level 5+ capped at 20%
+}
+```
+- `calculateDiscountLevel(minQty, selectedQty)` — computes offset from `minQty` index to selected index, capped at 5.
+- `getDiscountPercent(level)` — returns discount percentage for a given level.
+- `calculatePriceWithDiscount(basePrice, minQty, selectedQty)` — returns final price, base price for qty, discount level, and discount percent.
+
+### Currency (`items.lua`)
+```lua
+CURRENCY_UNITS = {
+    { name = "sun",     value = 4096 },
+    { name = "crown",   value = 512 },
+    { name = "cog",     value = 64 },
+    { name = "sprocket", value = 16 },
+    { name = "bevel",   value = 8 },
+    { name = "spur",    value = 1 },
+}
+```
+`spursToCoins(spurs)` — converts numeric spur amount to human-readable coin string (e.g., `160` → `"2 sprockets, 2 cogs"`).
 
 ### State (`modules/state.lua`)
-The state is managed by the `state.lua` module, which provides controlled access via `state.getState()`, `state.updateState(changes)`, `state.resetState()`, and `state.resetToMainScreen()` functions. `resetToMainScreen()` is the preferred way to reset to the main screen (clears selections and payment fields while preserving `lastActivity` and pedestal state). The state structure remains:
+The state is managed by the `state.lua` module, which provides controlled access via:
+- `state.getState(key)` — get a specific field (or shallow copy of entire state).
+- `state.updateState(changes)` — apply changes and notify subscribers.
+- `state.resetState()` — full reset to initial values (currently unused in main flow).
+- `state.resetToMainScreen()` — preferred reset: clears selections and payment fields while preserving `lastActivity`, `currentOptions`, `currentPedestalIndices`, `lastSelectedPedestal`.
+
+The state structure:
 
 ```lua
 local state = {
-    screen = 1,               -- 1=category, 2=material, 3=quantity, 4=thankyou
+    screen = 1,               -- 1=category, 2=materials, 3=quantity/payment, 4=thankyou
     subState = nil,           -- nil, "selecting", or "confirming" (screen 3 only)
     selectedCategory = nil,
     selectedMaterial = nil,
     selectedQty = nil,
-    calculatedPrice = nil,
+    calculatedPrice = nil,    -- final price after discount
+    discountLevel = nil,      -- bulk discount level (0-5, 5+ all get 20%)
+    discountPercent = nil,    -- discount percentage (0, 2, 5, 10, 15, 20)
+    basePriceForQty = nil,    -- price before discount (for display)
     lastActivity = os.clock(),
-    currentOptions = {},      -- pedestal index → option table { item, label, qty/category/material }
+    currentOptions = {},      -- pedestal index → { item, label, count }
     currentPedestalIndices = {}, -- which pedestal indices are currently used
     lastSelectedPedestal = nil, -- last selected pedestal index
     availableQuantities = nil, -- list of numeric quantities available for selected material
-    paymentBaseline = nil,    -- baseline relay input state for payment detection
+    paymentBaseline = nil,    -- baseline relay input state (captured before unlock)
     paymentDeadline = nil,    -- os.clock() deadline for payment timeout
     paymentPaid = false,
     paymentCheckCount = 0,    -- counter for payment detection checks
@@ -146,34 +186,54 @@ local state = {
 ## Configuration Files
 
 ### `config.lua`
-- Peripheral name constants (`RELAY_LOCK`, `AE2_ADAPTER`, `DEPOSITOR`, `SPEAKER_NAME`, `MONITOR`, `PEDESTALS`).
-- Timing constants (`IDLE_TIMEOUT`, `CONFIRM_DELAY`).
-- UI message table (`MSG`) with required keys:
+- **Peripheral name constants**: `RELAY_LOCK`, `AE2_ADAPTER`, `DEPOSITOR`, `SPEAKER_NAME`, `MONITOR`, `PEDESTALS`.
+- **Timing constants**:
+  - `IDLE_TIMEOUT = 120` — seconds before auto-reset on screens 2, 3A, 3B.
+  - `PAYMENT_TIMEOUT = 30` — seconds to wait for payment after unlocking depositor.
+  - `CONFIRM_DELAY = 5` — seconds on thank-you screen before auto-return.
+- **Payment detection**: `PAYMENT_DETECTION_SIDE = "bottom"` — which relay side to monitor for payment signal.
+- **Performance**:
+  - `EVENT_LOOP_SLEEP = 0.01` — event loop iteration interval.
+  - `AE2_CACHE_TTL = 30` — seconds before refreshing AE2 stock cache.
+- **Log level**: `LOG_LEVEL = "DEBUG"` (one of DEBUG, INFO, WARN, ERROR).
+- **UI message table** (`MSG`) with required keys:
   ```lua
   MSG = {
-    header           = "* SHOP *",
+    header           = "ccshop",
     screen1_hint     = "Right-click a pedestal to select a category",
+    screen1_discount_info = {
+        "Bulk discounts:",
+        "2% at 1 tier",
+        "5% at 2",
+        "10% at 3",
+        "15% at 4",
+        "20% at 5+"
+    },
     screen2_hint     = "RMB: select   LMB: go back",
     screen3_hint_select  = "RMB: select quantity   LMB: go back",
-    screen3_base_price   = "Base price: %d spurs for %s units",
-    screen3_price_calc   = "Price: %d spurs",
+    screen3_base_price   = "Base price: %d spurs for %d units",
+    screen3_breakdown_line = "Price breakdown: %d * %d/%d = %d",
+    screen3_discount_line = "Discount: -%d%% (%d spurs)",
+    screen3_total_line = "Total: %d spurs",
+    screen3_pedestal_instruction = "Use pedestals to change quantity",
     screen3_insert       = "Please insert %s into the depositor",
     screen4_thanks   = "Your items will be dispensed. Thank you!",
-    cancel_btn       = "[ CANCEL ]",
+    cancel_btn       = "CANCEL",
     error_ae2        = "AE2 network unavailable",
     error_deposit    = "Depositor unavailable",
     error_relay      = "Relay unavailable",
     timeout_msg      = "Session timed out. Returning to main screen.",
   }
   ```
-- `validatePeripherals()` – attempts to wrap each peripheral; called at startup.
+- `validatePeripherals()` — wraps all peripherals at startup; returns `false + error` if any missing.
 
 ### `items.lua`
 - `CATEGORIES`, `MATERIALS`, `QUANTITIES` tables.
-- Helper functions for quantity conversion and lookup (`quantityToNumber`, `findQuantityIndex`).
+- Helper functions: `quantityToNumber(qty)`, `numericQuantities()`, `findQuantityIndex(num)`.
+- Bulk discount system: `DISCOUNT_LEVELS`, `calculateDiscountLevel()`, `getDiscountPercent()`, `calculatePriceWithDiscount()`.
+- Currency conversion: `CURRENCY_UNITS`, `spursToCoins(spurs)`.
 - Required structure:
   ```lua
-  -- Categories
   CATEGORIES = {
     { label = "Metals",   item = "minecraft:iron_ingot"          },
     { label = "Crystals", item = "ae2:certus_quartz_crystal"     },
@@ -181,7 +241,6 @@ local state = {
     { label = "Dyes",     item = "minecraft:blue_dye"            },
   }
 
-  -- Materials
   MATERIALS = {
     {
       label     = "Iron Ingot",
@@ -190,32 +249,26 @@ local state = {
       minQty    = 64,         -- first quantity option shown; must exist in QUANTITIES
       basePrice = 10,         -- price in spurs for minQty units
     },
-    -- add more...
   }
 
-  -- Quantity tiers (ordered smallest → largest)
-  -- Allowed values: 1, 8, 32, 64, 256, 512, 1024, "4k", "16k", "32k"
   QUANTITIES = { 1, 8, 32, 64, 256, 512, 1024, "4k", "16k", "32k" }
   ```
+- Prices are calculated as `floor(basePrice * (selectedQty / minQty))` then adjusted by bulk discount multiplier.
 
 ### `db.lua`
-- `log(record)` – appends a purchase record in ndjson format.
-- `readAll()` – reads all logged purchases.
+- `log(record)` — appends a purchase record in ndjson format.
+- `readAll()` — reads all logged purchases.
 
-## Pedestal API Notes
+## UI Layout
 
-The `display_pedestal` peripheral from the Pedestals mod **does not have a `setLabel` method**. Instead, use `setItem(item, label)` with the label as the second argument. (This was discovered and fixed in commit `d3fa13f`; earlier versions incorrectly called `setLabel`.)
+The UI uses **fixed coordinate positioning** with Basalt:
 
-The code uses `pcall(pedestals[idx].setItem, opt.item, label)` and wraps `setLabelRendered` calls in `pcall` because that method may or may not exist.
+- **Header** (top bar): Line 1-2, red background, white text "ccshop", centered, font size 2.
+- **Spacer**: Line 3 (if monitor ≥ 9 lines tall), black background.
+- **Content area**: Lines 4 through `height - 4` (dynamically sized labels).
+- **Cancel button**: Positioned at `(2, height - 3)`, size `(min(14, width-4), 3)`, red background, white text, padded text " CANCEL ".
 
-Example from `setPedestalOptions`:
-```lua
-if label then
-    local ok, err = pcall(pedestals[idx].setItem, opt.item, label)
-else
-    local ok, err = pcall(pedestals[idx].setItem, opt.item)
-end
-```
+Content labels are created for each line in the content area and shown/hidden per screen state. Each label line is a separate Basalt label object for precise control.
 
 ## Cancel button behaviour
 
@@ -227,23 +280,70 @@ end
 | 3B – Awaiting payment | Yes | Lock depositor, return to Screen 1 |
 | 4 – Thank you | No | — |
 
-- Button position: top‑left corner of monitor.
-- Label: `"[ CANCEL ]"`.
+- Button position: **bottom‑left** corner of monitor `(2, height - 3)`.
+- Label: `"CANCEL"` (padded with spaces in code: `" CANCEL "`).
+- **Debouncing**: 500ms debounce window prevents multiple rapid clicks.
+- **Async reset**: Click triggers `os.startTimer(0.05)` for a timer-based `state.resetToMainScreen()` in the event loop coroutine — avoids Basalt coroutine issues with nested pedestal operations.
+- **Visual feedback**: Button turns gray immediately on click; stays visible for 200ms even on screen 1 for feedback visibility.
 
 ## Idle timeout behaviour
 
 - Applies to: Screens 2, 3A, 3B.
-- Duration: 120 s of no user interaction.
-- Action: if on 3B → lock depositor first; then return to Screen 1.
-- `state.lastActivity = os.clock()` is reset on every user interaction (pedestal click, cancel press).
+- Duration: `IDLE_TIMEOUT` (120 s) of no user interaction.
+- Action: if on 3B → lock depositor first; then `state.resetToMainScreen()`.
+- `state.lastActivity = os.clock()` is reset on every rendering (pedestal click, cancel press trigger render).
 
 ## Event Handling
 
-The `eventLoop` listens for `pedestal_left_click` and `pedestal_right_click` events. Each event carries:
-- The pedestal object or name (as `eventData[2]`).
-- A table describing the item in hand (`eventData[3]`), containing `name`, `count`, `displayName`.
+The `eventLoop` (`modules/events.lua`) blocks on `os.pullEvent()` and handles two event types:
 
-The script maps the pedestal object/name to an index using `pedestalObjectToIndex` and `pedestalIndexByName` lookups, then retrieves the corresponding option from `state.currentOptions`.
+1. **Pedestal click events** (`pedestal_left_click`, `pedestal_right_click`):
+   - `eventData[2]`: pedestal object or name string.
+   - `eventData[3]`: table with `name` (item ID), `count`, `displayName`.
+   - The script maps the pedestal to a pedestal index via `pedestalObjectToIndex` / `pedestalIndexByName`.
+   - Retrieves the corresponding option from `state.currentOptions`.
+   - Extracts selected count from `displayName` → numeric parsing, with fallback to `opt.count` and `eventData[3].count`.
+   - Category and material matching falls back from exact `itemId` match to prefix match (ignoring metadata after colon).
+
+2. **Timer events** (`timer`):
+   - Handles the cancel button's async `os.startTimer(0.05)` for debounced state reset.
+   - Calls `state.resetToMainScreen()` in the event loop coroutine when the timer fires.
+
+## Screen Rendering Guard
+
+`modules/screens.lua` implements a **rendering guard** with pending render queue to prevent re-entrant rendering and infinite loops:
+
+- `_rendering` flag: prevents concurrent renders. If `renderCurrentScreen()` is called while already rendering, it sets `_pendingRender = true` and returns.
+- `_pendingRender` queue: after current render completes, processes pending render exactly once.
+- `_lastRenderedScreen` / `_lastRenderedSubState` / `_lastRenderedQty` tracking: skips rendering if nothing meaningful changed since last render — avoids redundant updates.
+- **Infinite loop prevention**: If cancel triggers `resetToMainScreen()` during a render → pending render → checks screen/subState → unchanged → skips → loop broken.
+
+## Pedestal Rendering with Custom Coroutine Scheduler
+
+Pedestal updates (`modules/pedestal.lua`) use a **custom coroutine scheduler** (`runPedestalTasksParallel`) that runs pedestal tasks in parallel while preserving events for other top-level coroutines (Basalt, event loop, payment monitor):
+
+- Each pedestal task runs in its own coroutine.
+- The scheduler pulls raw events, re-queues non-timer events (so Basalt can process monitor touches for the cancel button), and resumes coroutines.
+- Tasks yield with `os.sleep(0)` after each pedestal operation for interleaving.
+
+This avoids the nested `parallel.waitForAll` problem where inner event loops would consume events meant for other coroutines.
+
+## Payment Detection
+
+Payment is detected by monitoring the **redstone relay input** for changes from the established baseline:
+
+1. **Baseline capture**: In `renderScreen3Confirming()`, all relay input sides are sampled **before** unlocking the depositor — eliminates the blind window where coins could be inserted undetected.
+2. **Depositor unlocked** after baseline capture.
+3. **0.5s stabilization** sleep after unlock.
+4. **Payment monitoring**: In `checkPaymentDetection()`, current relay inputs are compared against baseline on the configured `PAYMENT_DETECTION_SIDE` (default: `"bottom"`), with fallback to all other sides.
+5. **Payment timeout**: If `paymentDeadline` (`os.clock() + PAYMENT_TIMEOUT`) is reached, depositor is locked and `state.resetToMainScreen()`.
+6. **On payment**: Depositor locked, `paymentPaid = true`, screen transitions to 4.
+
+## Pedestal API Notes
+
+The `display_pedestal` peripheral from the Pedestals mod **does not have a `setLabel` method**. Instead, use `setItem(item, label)` with the label as the second argument. (This was discovered and fixed in commit `d3fa13f`; earlier versions incorrectly called `setLabel`.)
+
+The code uses `pcall(pedestals[idx].setItem, opt.item, label)` and wraps `setLabelRendered`/`setItemRendered` calls in `pcall` because these methods may or may not exist depending on the mod version.
 
 ## Adding a New Pedestal
 
@@ -260,9 +360,16 @@ The script maps the pedestal object/name to an index using `pedestalObjectToInde
 ## Debugging
 
 - The script writes detailed logs to `/ccshop/shop_debug.log` via `writeLog()`.
-- Logs include peripheral wrapping results, stock queries, event data, and state transitions.
+- Logs include peripheral wrapping results, stock queries, event data, state transitions, and payment detection.
 - The debug file is appended each run; clear it manually if it grows too large.
 - Purchase records are stored in `/ccshop/purchases.json` (ndjson format).
+- Log level controlled by `LOG_LEVEL` in `config.lua` (`DEBUG`, `INFO`, `WARN`, `ERROR`).
+- Most debug logging statements are commented out in production; uncomment for detailed diagnosis.
+
+## See Also
+
+- [`state_transitions.md`](./state_transitions.md) — Detailed state machine documentation.
+- [`parallel_execution.md`](./parallel_execution.md) — Concurrency model and coroutine scheduler documentation.
 
 
 ## Workflow Orchestration

@@ -275,6 +275,14 @@ local function eventLoop()
                     ui.resetCancelButtonTimerId()
                     state.resetToMainScreen()
                 end
+
+            -- Crafting events from AE2 adapter
+            elseif event == "ae2cc:crafting_done" then
+                local crafting = require("modules.crafting")
+                crafting.handleCraftingDone()
+            elseif event == "ae2cc:crafting_cancelled" then
+                local crafting = require("modules.crafting")
+                crafting.handleCraftingCancelled()
             end
         end)
         if not ok then

@@ -3,8 +3,9 @@
 
 -- Peripheral names (update to match your setup)
 RELAY_LOCK     = "redstone_relay_38"
-AE2_ADAPTER    = "ae2cc_adapter_14"
-DEPOSITOR      = "Numismatics_Depositor_8"
+AE2_ADAPTER       = "ae2cc_adapter_14"   -- stock queries
+CRAFTING_ADAPTER  = "ae2cc_adapter_13"   -- item dispensing (separate AE2 system)
+DEPOSITOR         = "Numismatics_Depositor_8"
 SPEAKER_NAME   = "speaker_212"
 MONITOR        = "monitor_1012"
 
@@ -21,7 +22,9 @@ PEDESTALS = {
 -- Timing (seconds)
 IDLE_TIMEOUT   = 120      -- seconds before auto-reset
 PAYMENT_TIMEOUT = 30      -- seconds to wait for payment after unlocking depositor
-CONFIRM_DELAY  = 5        -- seconds on thank-you screen
+CONFIRM_DELAY       = 5        -- seconds on thank-you screen / collection message
+CRAFTING_POLL_INTERVAL     = 1        -- seconds between crafting progress checks (active)
+CRAFTING_IDLE_POLL_INTERVAL = 5       -- seconds between checks (idle, no active craft)
 
 -- Payment detection
 PAYMENT_DETECTION_SIDE = "bottom"  -- which side of the relay is connected to depositor payment signal
@@ -54,6 +57,11 @@ MSG = {
   screen3_pedestal_instruction = "Use pedestals to change quantity",
   screen3_insert       = "Please insert %s into the depositor",
   screen4_thanks   = "Your items will be dispensed. Thank you!",
+  screen4_crafting_start = "Starting crafting job...",
+  screen4_crafting_progress = "Crafting: %d/%d",
+  screen4_collect_message = "Collect purchased items from the chest",
+  screen4_crafting_error = "Crafting failed: %s",
+  screen4_crafting_cancelled = "Crafting cancelled",
   cancel_btn       = "CANCEL",
   error_ae2        = "AE2 network unavailable",
   error_deposit    = "Depositor unavailable",
@@ -65,10 +73,11 @@ MSG = {
 -- Returns true if all peripherals are present, false + error message otherwise
 function validatePeripherals()
   local peripherals = {
-    { name = RELAY_LOCK,  type = "redstone_relay" },
-    { name = AE2_ADAPTER, type = "ae2cc_adapter" },
-    { name = DEPOSITOR,   type = "Numismatics_Depositor" },
-    { name = SPEAKER_NAME, type = "speaker" },
+    { name = RELAY_LOCK,      type = "redstone_relay" },
+    { name = AE2_ADAPTER,     type = "ae2cc_adapter" },
+    { name = CRAFTING_ADAPTER, type = "ae2cc_adapter" },
+    { name = DEPOSITOR,       type = "Numismatics_Depositor" },
+    { name = SPEAKER_NAME,    type = "speaker" },
   }
   for _, p in ipairs(peripherals) do
     local ok, wrapped = pcall(peripheral.wrap, p.name)

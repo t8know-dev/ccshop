@@ -22,6 +22,7 @@ local ui = require("modules.ui")
 local screens = require("modules.screens")
 local events = require("modules.events")
 local payment = require("modules.payment")
+local crafting = require("modules.crafting")
 
 -- ============================================================================
 -- Initialize modules with dependencies
@@ -46,8 +47,8 @@ pedestal.init(logging, peripherals, config, state)
 -- Initialize UI (depends on peripherals, logging, config, state, basalt)
 ui.init(logging, peripherals, config, state, basalt)
 
--- Initialize screens (depends on pedestal, ui, peripherals, config, state, db)
-screens.init(logging, pedestal, ui, peripherals, config, state, db)
+-- Initialize screens (depends on pedestal, ui, peripherals, config, state, db, crafting)
+screens.init(logging, pedestal, ui, peripherals, config, state, db, crafting)
 
 -- Initialize events (depends on state, screens, pedestal, peripherals, logging, config, ui)
 events.init(logging, state, screens, pedestal, peripherals, config, ui)
@@ -55,16 +56,19 @@ events.init(logging, state, screens, pedestal, peripherals, config, ui)
 -- Initialize payment (depends on state, peripherals, screens, config, logging)
 payment.init(logging, state, peripherals, screens, config)
 
+-- Initialize crafting (depends on logging, peripherals, config, state)
+crafting.init(logging, peripherals, config, state)
+
 -- ============================================================================
 -- State change listener: trigger screen re‑render when screen changes
 -- ============================================================================
 state.subscribe(function(changes)
     -- logging.writeLog("DEBUG", "State subscriber called with changes: " .. textutils.serialize(changes))
-    if changes.screen ~= nil or changes.subState ~= nil or changes.selectedQty ~= nil then
+    if changes.screen ~= nil or changes.subState ~= nil or changes.selectedQty ~= nil or changes.craftingStatus ~= nil then
         -- logging.writeLog("DEBUG", "State changes: " .. textutils.serialize(changes) .. " triggering render")
         screens.renderCurrentScreen()
     else
-        -- logging.writeLog("DEBUG", "State changes ignored (no screen/subState/selectedQty)")
+        -- logging.writeLog("DEBUG", "State changes ignored (no screen/subState/selectedQty/craftingStatus)")
     end
 end)
 
@@ -90,7 +94,8 @@ local ok, err = pcall(function()
     parallel.waitForAny(
         function() basalt.run() end,
         events.eventLoop,
-        payment.paymentMonitorLoop
+        payment.paymentMonitorLoop,
+        crafting.craftingMonitorLoop
     )
 end)
 

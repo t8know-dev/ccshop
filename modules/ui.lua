@@ -357,15 +357,59 @@ local function updateUI()
         end
 
     elseif screen == 4 then
-        -- Screen 4: Thank you message
-        if contentLabels[contentFirstLine] then
-            contentLabels[contentFirstLine]:setText(MSG.screen4_thanks)
-            contentLabels[contentFirstLine]:setVisible(true)
+        -- Screen 4: Crafting progress or thank you message
+        local craftingStatus = state.getState("craftingStatus")
+        local craftedObjects = state.getState("craftedObjects") or 0
+        local totalObjects = state.getState("totalObjects") or 0
+
+        if craftingStatus == "starting" then
+            -- Starting message on first line
+            if contentLabels[contentFirstLine] then
+                contentLabels[contentFirstLine]:setText(MSG.screen4_crafting_start)
+                contentLabels[contentFirstLine]:setVisible(true)
+            end
+        elseif craftingStatus == "in_progress" then
+            -- Counter on first line
+            if contentLabels[contentFirstLine] then
+                local progressText = string.format(MSG.screen4_crafting_progress,
+                    craftedObjects, totalObjects)
+                contentLabels[contentFirstLine]:setText(progressText)
+                contentLabels[contentFirstLine]:setVisible(true)
+            end
+            -- Visual progress bar on second line (if space allows)
+            if contentLabels[contentFirstLine + 1] and (contentFirstLine + 1) <= contentLastLine then
+                local barWidth = math.max(1, monitorWidth - 4)  -- Account for [ and ]
+                local fillWidth = 0
+                if totalObjects > 0 then
+                    fillWidth = math.floor((craftedObjects / totalObjects) * barWidth)
+                end
+                local bar = "[" .. string.rep("=", fillWidth) ..
+                           string.rep(" ", barWidth - fillWidth) .. "]"
+                contentLabels[contentFirstLine + 1]:setText(bar)
+                contentLabels[contentFirstLine + 1]:setVisible(true)
+            end
+        elseif craftingStatus == "completed" then
+            -- Thank you message on first line
+            if contentLabels[contentFirstLine] then
+                contentLabels[contentFirstLine]:setText(MSG.screen4_thanks)
+                contentLabels[contentFirstLine]:setVisible(true)
+            end
+            -- Collection message at bottom
+            if contentLabels[contentLastLine] then
+                contentLabels[contentLastLine]:setText(MSG.screen4_collect_message)
+                contentLabels[contentLastLine]:setVisible(true)
+            end
+        else
+            -- Fallback (nil, failed, or cancelled): original thank you message
+            if contentLabels[contentFirstLine] then
+                contentLabels[contentFirstLine]:setText(MSG.screen4_thanks)
+                contentLabels[contentFirstLine]:setVisible(true)
+            end
         end
+
         -- Hide cancel button
         logging.writeLog("DEBUG", "Screen 4: hiding cancel button")
         if cancelButton and cancelButton.setVisible then
-            -- Reset color to red before hiding for next time
             if cancelButton.setBackground then
                 cancelButton:setBackground(colors.red)
             end
